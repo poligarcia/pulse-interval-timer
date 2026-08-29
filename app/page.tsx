@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 type TimerConfig = {
   id: string;
   name: string;
+  nameIsCustom?: boolean;
   prepare: number;
   work: number;
   rest: number;
@@ -19,6 +20,8 @@ type Settings = {
   soundEnabled: boolean;
   volume: number;
   ticking: boolean;
+  voiceEnabled: boolean;
+  voiceURI: string;
   ducking: boolean;
   rotation: boolean;
 };
@@ -33,75 +36,98 @@ type WorkoutPhase = {
   cycle: number;
 };
 
-type ScreenName = 'home' | 'editor' | 'runner' | 'settings';
+type ScreenName = 'home' | 'library' | 'editor' | 'runner' | 'settings';
+type ReturnScreen = 'home' | 'library';
 
-const APP_VERSION = '1.0.0';
-const TIMERS_STORAGE = 'pulse-timers-v1';
+const APP_VERSION = '1.1.0';
+const TIMERS_STORAGE = 'pulse-timers-v2';
+const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
+const HOME_TIMER_LIMIT = 4;
 
-const DEFAULT_TIMERS: TimerConfig[] = [
-  {
-    id: 'classic-30-60',
-    name: 'Classic 30 / 60',
+function generatedTimerName(timer: Pick<TimerConfig, 'work' | 'rest' | 'rounds' | 'cycles'>) {
+  const cycles = timer.cycles > 1 ? ` X ${timer.cycles}` : '';
+  return `${timer.work}s work - ${timer.rest}s rest X ${timer.rounds}${cycles}`;
+}
+
+function makeDefaultTimer(work: number, rest: number, index: number): TimerConfig {
+  const timer: TimerConfig = {
+    id: `preset-${work}-${rest}-4-${index}`,
+    name: '',
+    nameIsCustom: false,
     prepare: 5,
-    work: 30,
-    rest: 60,
+    work,
+    rest,
     rounds: 4,
     cycles: 1,
     cycleRest: 60,
     cooldown: 10,
-  },
-  {
-    id: 'power-20-10',
-    name: 'Power 20 / 10',
-    prepare: 10,
-    work: 20,
-    rest: 10,
-    rounds: 8,
-    cycles: 2,
-    cycleRest: 90,
-    cooldown: 30,
-  },
-  {
-    id: 'steady-45-15',
-    name: 'Steady 45 / 15',
-    prepare: 10,
-    work: 45,
-    rest: 15,
-    rounds: 6,
-    cycles: 1,
-    cycleRest: 60,
-    cooldown: 45,
-  },
+  };
+  timer.name = generatedTimerName(timer);
+  return timer;
+}
+
+const DEFAULT_COMBINATIONS: Array<[number, number]> = [
+  [10, 60], [10, 90], [15, 60], [15, 90], [20, 60], [20, 90], [20, 120],
+  [30, 60], [30, 90], [30, 120], [40, 60], [40, 90], [50, 60], [50, 90],
+];
+
+const DEFAULT_TIMERS = DEFAULT_COMBINATIONS.map(([work, rest], index) => makeDefaultTimer(work, rest, index));
+
+const LEGACY_DEFAULTS: TimerConfig[] = [
+  { id: 'classic-30-60', name: 'Classic 30 / 60', prepare: 5, work: 30, rest: 60, rounds: 4, cycles: 1, cycleRest: 60, cooldown: 10 },
+  { id: 'power-20-10', name: 'Power 20 / 10', prepare: 10, work: 20, rest: 10, rounds: 8, cycles: 2, cycleRest: 90, cooldown: 30 },
+  { id: 'steady-45-15', name: 'Steady 45 / 15', prepare: 10, work: 45, rest: 15, rounds: 6, cycles: 1, cycleRest: 60, cooldown: 45 },
 ];
 
 const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   volume: 0.65,
   ticking: false,
+  voiceEnabled: false,
+  voiceURI: '',
   ducking: false,
   rotation: true,
 };
 
-const EMPTY_TIMER: TimerConfig = {
-  id: '',
-  name: 'New interval',
-  prepare: 10,
-  work: 30,
-  rest: 15,
-  rounds: 6,
-  cycles: 1,
-  cycleRest: 60,
-  cooldown: 30,
+function makeEmptyTimer(): TimerConfig {
+  const timer: TimerConfig = {
+    id: '',
+    name: '',
+    nameIsCustom: false,
+    prepare: 10,
+    work: 30,
+    rest: 15,
+    rounds: 6,
+    cycles: 1,
+    cycleRest: 60,
+    cooldown: 30,
+  };
+  timer.name = generatedTimerName(timer);
+  return timer;
+}
+
+const PHASE_META: Record<PhaseKind, { label: string; short: string; spoken: string }> = {
+  prepare: { label: 'Prepare', short: 'Get ready', spoken: 'Prepare' },
+  work: { label: 'Work', short: 'Push', spoken: 'Work' },
+  rest: { label: 'Rest', short: 'Recover', spoken: 'Rest' },
+  cycleRest: { label: 'Cycle rest', short: 'Reset', spoken: 'Cycle rest' },
+  cooldown: { label: 'Cooldown', short: 'Breathe', spoken: 'Cool down' },
 };
 
-const PHASE_META: Record<PhaseKind, { label: string; short: string }> = {
-  prepare: { label: 'Prepare', short: 'Get ready' },
-  work: { label: 'Work', short: 'Push' },
-  rest: { label: 'Rest', short: 'Recover' },
-  cycleRest: { label: 'Cycle rest', short: 'Reset' },
-  cooldown: { label: 'Cooldown', short: 'Breathe' },
-};
+const REST_QUOTES = [
+  { text: 'Well done is better than well said.', author: 'Benjamin Franklin' },
+  { text: 'Action is eloquence.', author: 'William Shakespeare' },
+  { text: 'Nothing great was ever achieved without enthusiasm.', author: 'Ralph Waldo Emerson' },
+  { text: 'Let each man do his best.', author: 'William Shakespeare' },
+  { text: 'Heaven never helps the man who will not act.', author: 'Sophocles' },
+];
+
+const COOLDOWN_REFLECTIONS = [
+  { text: 'Let your breathing settle. Notice what felt difficult, what became easier, and one small thing you want to carry into the next session.', author: 'Pulse Coach' },
+  { text: 'The work is finished; the adaptation is beginning. Give your body time to slow down and acknowledge the effort you chose to make today.', author: 'Pulse Coach' },
+  { text: 'Release the tension you no longer need. Keep the confidence that comes from completing one more deliberate practice.', author: 'Pulse Coach' },
+];
 
 function formatTime(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds));
@@ -137,27 +163,41 @@ function buildSequence(timer: TimerConfig): WorkoutPhase[] {
     }
 
     if (cycle < timer.cycles && timer.cycleRest > 0) {
-      sequence.push({
-        kind: 'cycleRest',
-        label: 'Cycle rest',
-        duration: timer.cycleRest,
-        round: timer.rounds,
-        cycle,
-      });
+      sequence.push({ kind: 'cycleRest', label: 'Cycle rest', duration: timer.cycleRest, round: timer.rounds, cycle });
     }
   }
 
   if (timer.cooldown > 0) {
-    sequence.push({
-      kind: 'cooldown',
-      label: 'Cooldown',
-      duration: timer.cooldown,
-      round: timer.rounds,
-      cycle: timer.cycles,
-    });
+    sequence.push({ kind: 'cooldown', label: 'Cooldown', duration: timer.cooldown, round: timer.rounds, cycle: timer.cycles });
   }
 
   return sequence;
+}
+
+function isUnchangedLegacyDefault(timer: TimerConfig) {
+  const original = LEGACY_DEFAULTS.find((candidate) => candidate.id === timer.id);
+  if (!original) return false;
+  return (['name', 'prepare', 'work', 'rest', 'rounds', 'cycles', 'cycleRest', 'cooldown'] as const)
+    .every((key) => timer[key] === original[key]);
+}
+
+function migrateLegacyTimers(timers: TimerConfig[]) {
+  const preserved = timers
+    .filter((timer) => !isUnchangedLegacyDefault(timer))
+    .map((timer) => ({
+      ...timer,
+      id: LEGACY_DEFAULTS.some((preset) => preset.id === timer.id) ? `migrated-${timer.id}` : timer.id,
+      nameIsCustom: true,
+    }));
+  return [...DEFAULT_TIMERS, ...preserved];
+}
+
+function PlayGlyph() {
+  return <span className="play-glyph" aria-hidden="true" />;
+}
+
+function PauseGlyph() {
+  return <span className="pause-glyph" aria-hidden="true"><i /><i /></span>;
 }
 
 function Switch({
@@ -173,13 +213,7 @@ function Switch({
 }) {
   return (
     <label className={`switch ${disabled ? 'disabled' : ''}`}>
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        aria-label={label}
-      />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} aria-label={label} />
       <span className="switch-track"><span className="switch-thumb" /></span>
     </label>
   );
@@ -204,10 +238,7 @@ function MetricInput({
 }) {
   return (
     <label className="metric-input">
-      <span className="metric-copy">
-        <strong>{label}</strong>
-        <small>{helper}</small>
-      </span>
+      <span className="metric-copy"><strong>{label}</strong><small>{helper}</small></span>
       <span className="metric-control">
         <input
           type="number"
@@ -226,22 +257,40 @@ function MetricInput({
   );
 }
 
+function TimerDetails({ timer, index }: { timer: TimerConfig; index: number }) {
+  return (
+    <>
+      <span className={`timer-number color-${index % 3}`}>{String(index + 1).padStart(2, '0')}</span>
+      <span className="timer-info">
+        <strong>{timer.name}</strong>
+        <small>{formatTime(workoutDuration(timer))} · {timer.rounds} rounds · {timer.cycles} {timer.cycles === 1 ? 'cycle' : 'cycles'}</small>
+        <span className="interval-row">
+          <span><i className="dot work-dot" /> Work {formatCompact(timer.work)}</span>
+          <span><i className="dot rest-dot" /> Rest {formatCompact(timer.rest)}</span>
+        </span>
+      </span>
+    </>
+  );
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<ScreenName>('home');
+  const [returnScreen, setReturnScreen] = useState<ReturnScreen>('home');
   const [timers, setTimers] = useState<TimerConfig[]>(DEFAULT_TIMERS);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [draft, setDraft] = useState<TimerConfig>(EMPTY_TIMER);
+  const [draft, setDraft] = useState<TimerConfig>(makeEmptyTimer());
   const [activeTimer, setActiveTimer] = useState<TimerConfig>(DEFAULT_TIMERS[0]);
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [remaining, setRemaining] = useState(DEFAULT_TIMERS[0].prepare);
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [voiceInfoOpen, setVoiceInfoOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const deadlineRef = useRef(0);
   const transitionLockRef = useRef(false);
+  const lastTickSecondRef = useRef<number | null>(null);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
@@ -253,10 +302,14 @@ export default function Home() {
     let storedSettings: Settings | null = null;
     try {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
+      const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
       if (savedTimers) {
         const parsed = JSON.parse(savedTimers) as TimerConfig[];
         if (Array.isArray(parsed) && parsed.length > 0) storedTimers = parsed;
+      } else if (legacyTimers) {
+        const parsed = JSON.parse(legacyTimers) as TimerConfig[];
+        if (Array.isArray(parsed)) storedTimers = migrateLegacyTimers(parsed);
       }
       if (savedSettings) storedSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
     } catch {
@@ -269,7 +322,7 @@ export default function Home() {
       setHydrated(true);
     });
 
-    if ('serviceWorker' in navigator) {
+    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => undefined);
     }
   }, []);
@@ -284,38 +337,58 @@ export default function Home() {
     window.localStorage.setItem(SETTINGS_STORAGE, JSON.stringify(settings));
   }, [settings, hydrated]);
 
-  const ensureAudio = useCallback(() => {
-    if (!audioContextRef.current) {
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const refreshVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices.filter((voice) => voice.lang.toLowerCase().startsWith('en')));
+    };
+    const timer = window.setTimeout(refreshVoices, 0);
+    window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
+    return () => {
+      window.clearTimeout(timer);
+      window.speechSynthesis.removeEventListener('voiceschanged', refreshVoices);
+    };
+  }, []);
+
+  const ensureAudio = useCallback(async () => {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
       const AudioContextClass = window.AudioContext ||
         (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioContextClass) audioContextRef.current = new AudioContextClass();
     }
-    audioContextRef.current?.resume().catch(() => undefined);
-    return audioContextRef.current;
+
+    const context = audioContextRef.current;
+    if (!context) return null;
+    try {
+      if (context.state !== 'running') await context.resume();
+      return context.state === 'running' ? context : null;
+    } catch {
+      return null;
+    }
   }, []);
 
-  const playTone = useCallback((frequency: number, duration = 0.11, volumeScale = 1) => {
-    if (!settings.soundEnabled || settings.volume <= 0) return;
-    const context = ensureAudio();
-    if (!context) return;
+  const playTone = useCallback(async (frequency: number, duration = 0.11, volumeScale = 1) => {
+    if (!settings.soundEnabled || settings.volume <= 0) return false;
+    const context = await ensureAudio();
+    if (!context) return false;
 
     const oscillator = context.createOscillator();
     const gain = context.createGain();
+    const start = context.currentTime;
     oscillator.type = 'square';
     oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(
-      Math.max(0.0001, settings.volume * 0.18 * volumeScale),
-      context.currentTime + 0.008,
-    );
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + duration);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, settings.volume * 0.18 * volumeScale), start + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain);
     gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + duration + 0.02);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+    return true;
   }, [ensureAudio, settings.soundEnabled, settings.volume]);
 
-  const playCue = useCallback((kind: PhaseKind | 'complete') => {
+  const playCue = useCallback(async (kind: PhaseKind | 'complete') => {
     const frequencies: Record<PhaseKind | 'complete', number> = {
       prepare: 560,
       work: 920,
@@ -324,11 +397,30 @@ export default function Home() {
       cooldown: 520,
       complete: 1040,
     };
-    playTone(frequencies[kind], kind === 'complete' ? 0.3 : 0.16, 1.2);
-    if (kind === 'complete') {
-      window.setTimeout(() => playTone(1240, 0.34, 1.2), 180);
+    const played = await playTone(frequencies[kind], kind === 'complete' ? 0.3 : 0.16, 1.2);
+    if (kind === 'complete' && played) {
+      window.setTimeout(() => { void playTone(1240, 0.34, 1.2); }, 180);
     }
+    return played;
   }, [playTone]);
+
+  const speak = useCallback((text: string, interrupt = false) => {
+    if (!settings.voiceEnabled || !('speechSynthesis' in window)) return;
+    if (interrupt) window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const selectedVoice = availableVoices.find((voice) => voice.voiceURI === settings.voiceURI);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.lang = selectedVoice?.lang ?? 'en-US';
+    utterance.rate = 1.02;
+    utterance.pitch = 1;
+    utterance.volume = settings.volume;
+    window.speechSynthesis.speak(utterance);
+  }, [availableVoices, settings.voiceEnabled, settings.voiceURI, settings.volume]);
+
+  const announcePhase = useCallback((phase: WorkoutPhase) => {
+    void playCue(phase.kind);
+    speak(PHASE_META[phase.kind].spoken, true);
+  }, [playCue, speak]);
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
@@ -368,69 +460,93 @@ export default function Home() {
   const finishPhase = useCallback(() => {
     if (transitionLockRef.current) return;
     transitionLockRef.current = true;
+    const nextIndex = phaseIndex + 1;
 
-    setPhaseIndex((currentIndex) => {
-      const nextIndex = currentIndex + 1;
-      if (nextIndex >= sequence.length) {
-        setRunning(false);
-        setFinished(true);
-        setRemaining(0);
-        playCue('complete');
-        releaseWakeLock();
-        transitionLockRef.current = false;
-        return currentIndex;
-      }
-
-      const upcoming = sequence[nextIndex];
-      setRemaining(upcoming.duration);
-      deadlineRef.current = Date.now() + upcoming.duration * 1000;
-      playCue(upcoming.kind);
+    if (nextIndex >= sequence.length) {
+      setRunning(false);
+      setFinished(true);
+      setRemaining(0);
+      void playCue('complete');
+      speak('Workout complete', true);
+      releaseWakeLock();
       transitionLockRef.current = false;
-      return nextIndex;
-    });
-  }, [playCue, releaseWakeLock, sequence]);
+      return;
+    }
+
+    const upcoming = sequence[nextIndex];
+    setPhaseIndex(nextIndex);
+    setRemaining(upcoming.duration);
+    lastTickSecondRef.current = upcoming.duration;
+    deadlineRef.current = Date.now() + upcoming.duration * 1000;
+    announcePhase(upcoming);
+    transitionLockRef.current = false;
+  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, sequence, speak]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
-    let lastDisplayed = remaining;
-
     const interval = window.setInterval(() => {
       const millisecondsLeft = deadlineRef.current - Date.now();
       const nextRemaining = Math.max(0, Math.ceil(millisecondsLeft / 1000));
 
-      if (nextRemaining !== lastDisplayed) {
-        if (settings.ticking && nextRemaining > 0 && nextRemaining <= 5) {
-          playTone(1180, 0.035, 0.34);
-        }
-        lastDisplayed = nextRemaining;
+      if (nextRemaining !== lastTickSecondRef.current) {
+        lastTickSecondRef.current = nextRemaining;
         setRemaining(nextRemaining);
+        if (nextRemaining > 0 && settings.ticking) {
+          void playTone(1180, 0.035, 0.34);
+        }
+        if ((currentPhase.kind === 'work' || currentPhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
+          speak(String(nextRemaining));
+        }
       }
 
       if (millisecondsLeft <= 0) finishPhase();
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [currentPhase, finishPhase, playTone, remaining, running, settings.ticking]);
+  }, [currentPhase, finishPhase, playTone, running, settings.ticking, speak]);
 
-  useEffect(() => () => releaseWakeLock(), [releaseWakeLock]);
+  useEffect(() => () => {
+    releaseWakeLock();
+    window.speechSynthesis?.cancel();
+  }, [releaseWakeLock]);
 
-  const openEditor = (timer?: TimerConfig) => {
-    setDraft(timer ? { ...timer } : { ...EMPTY_TIMER, id: '' });
+  const openEditor = (timer?: TimerConfig, origin?: ReturnScreen) => {
+    const destination = origin ?? (screen === 'library' ? 'library' : 'home');
+    setReturnScreen(destination);
+    setDraft(timer ? { ...timer, nameIsCustom: timer.nameIsCustom ?? true } : makeEmptyTimer());
     setScreen('editor');
   };
 
-  const updateDraft = (key: keyof TimerConfig, value: string | number) => {
-    setDraft((current) => ({ ...current, [key]: value }));
+  const updateDraftMetric = (key: keyof Pick<TimerConfig, 'prepare' | 'work' | 'rest' | 'rounds' | 'cycles' | 'cycleRest' | 'cooldown'>, value: number) => {
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      if (!current.nameIsCustom) next.name = generatedTimerName(next);
+      return next;
+    });
+  };
+
+  const updateDraftName = (name: string) => {
+    setDraft((current) => ({ ...current, name, nameIsCustom: name.trim() !== generatedTimerName(current) }));
+  };
+
+  const resetDraftName = () => {
+    setDraft((current) => ({ ...current, name: generatedTimerName(current), nameIsCustom: false }));
   };
 
   const saveTimer = () => {
-    const safeTimer: TimerConfig = {
+    const normalizedDraft = {
       ...draft,
-      id: draft.id || `timer-${Date.now()}`,
-      name: draft.name.trim() || 'Untitled timer',
       work: Math.max(1, draft.work),
       rounds: Math.max(1, draft.rounds),
       cycles: Math.max(1, draft.cycles),
+    };
+    const customName = normalizedDraft.name.trim();
+    const automaticName = generatedTimerName(normalizedDraft);
+    const safeTimer: TimerConfig = {
+      ...normalizedDraft,
+      id: draft.id || `timer-${Date.now()}`,
+      name: customName || automaticName,
+      nameIsCustom: Boolean(customName && customName !== automaticName),
     };
 
     setTimers((current) => {
@@ -439,13 +555,24 @@ export default function Home() {
         ? current.map((timer) => timer.id === safeTimer.id ? safeTimer : timer)
         : [safeTimer, ...current];
     });
-    setScreen('home');
+    setScreen(returnScreen);
   };
 
   const deleteTimer = () => {
     if (!draft.id) return;
     setTimers((current) => current.filter((timer) => timer.id !== draft.id));
-    setScreen('home');
+    setScreen('library');
+  };
+
+  const moveTimer = (index: number, offset: -1 | 1) => {
+    setTimers((current) => {
+      const destination = index + offset;
+      if (destination < 0 || destination >= current.length) return current;
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(destination, 0, moved);
+      return next;
+    });
   };
 
   const beginWorkout = (timer: TimerConfig) => {
@@ -453,17 +580,18 @@ export default function Home() {
     setActiveTimer(timer);
     setPhaseIndex(0);
     setRemaining(firstSequence[0]?.duration ?? 0);
+    lastTickSecondRef.current = firstSequence[0]?.duration ?? 0;
     setRunning(false);
     setFinished(false);
     setScreen('runner');
-    applyOrientation(settings.rotation);
+    void applyOrientation(settings.rotation);
   };
 
-  const toggleWorkout = () => {
-    ensureAudio();
+  const toggleWorkout = async () => {
     if (finished) {
       setPhaseIndex(0);
       setRemaining(sequence[0]?.duration ?? 0);
+      lastTickSecondRef.current = sequence[0]?.duration ?? 0;
       setFinished(false);
       return;
     }
@@ -471,12 +599,15 @@ export default function Home() {
     if (running) {
       setRemaining(Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)));
       setRunning(false);
+      window.speechSynthesis?.cancel();
       releaseWakeLock();
     } else {
+      await ensureAudio();
       deadlineRef.current = Date.now() + remaining * 1000;
+      lastTickSecondRef.current = remaining;
       setRunning(true);
-      playCue(currentPhase?.kind ?? 'prepare');
-      requestWakeLock();
+      if (currentPhase) announcePhase(currentPhase);
+      void requestWakeLock();
     }
   };
 
@@ -485,14 +616,22 @@ export default function Home() {
     setFinished(false);
     setPhaseIndex(0);
     setRemaining(sequence[0]?.duration ?? 0);
+    lastTickSecondRef.current = sequence[0]?.duration ?? 0;
+    window.speechSynthesis?.cancel();
     releaseWakeLock();
   };
 
   const leaveWorkout = () => {
     setRunning(false);
+    window.speechSynthesis?.cancel();
     releaseWakeLock();
     try { screenOrientation().unlock?.(); } catch { /* no-op */ }
     setScreen('home');
+  };
+
+  const openSettings = (origin: ReturnScreen) => {
+    setReturnScreen(origin);
+    setScreen('settings');
   };
 
   const totalRemaining = finished
@@ -503,11 +642,17 @@ export default function Home() {
     ? Math.min(1, Math.max(0, (currentPhase.duration - remaining) / currentPhase.duration))
     : finished ? 1 : 0;
 
+  const runnerMessage = currentPhase?.kind === 'rest' || currentPhase?.kind === 'cycleRest'
+    ? REST_QUOTES[(phaseIndex + currentPhase.round + currentPhase.cycle) % REST_QUOTES.length]
+    : currentPhase?.kind === 'cooldown'
+      ? COOLDOWN_REFLECTIONS[(activeTimer.rounds + activeTimer.cycles) % COOLDOWN_REFLECTIONS.length]
+      : null;
+
   if (screen === 'editor') {
     return (
       <main className="app-shell editor-screen">
         <header className="screen-header">
-          <button className="text-button muted" onClick={() => setScreen('home')}>Cancel</button>
+          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>Cancel</button>
           <div className="header-title"><span className="eyebrow">TIMER SETUP</span><strong>{draft.id ? 'Edit timer' : 'New timer'}</strong></div>
           <button className="text-button accent" onClick={saveTimer}>Save</button>
         </header>
@@ -515,42 +660,34 @@ export default function Home() {
         <section className="editor-content">
           <label className="name-field">
             <span>Workout name</span>
-            <input
-              value={draft.name}
-              maxLength={36}
-              onChange={(event) => updateDraft('name', event.target.value)}
-              placeholder="My interval timer"
-            />
+            <input value={draft.name} maxLength={48} onChange={(event) => updateDraftName(event.target.value)} placeholder={generatedTimerName(draft)} />
           </label>
+          <div className="name-helper">
+            <span>{draft.nameIsCustom ? 'Custom name' : 'Updates automatically with the intervals'}</span>
+            {draft.nameIsCustom && <button onClick={resetDraftName}>Use automatic name</button>}
+          </div>
 
           <div className="editor-section-title"><span>Intervals</span><small>SECONDS</small></div>
           <div className="metric-list">
-            <MetricInput label="Prepare" helper="Countdown before you start" value={draft.prepare} unit="sec" min={0} max={600} onChange={(value) => updateDraft('prepare', value)} />
-            <MetricInput label="Work" helper="Move for this long" value={draft.work} unit="sec" min={1} max={3600} onChange={(value) => updateDraft('work', value)} />
-            <MetricInput label="Rest" helper="Between rounds" value={draft.rest} unit="sec" min={0} max={3600} onChange={(value) => updateDraft('rest', value)} />
-            <MetricInput label="Cooldown" helper="Once after the workout" value={draft.cooldown} unit="sec" min={0} max={3600} onChange={(value) => updateDraft('cooldown', value)} />
+            <MetricInput label="Prepare" helper="Countdown before you start" value={draft.prepare} unit="sec" min={0} max={600} onChange={(value) => updateDraftMetric('prepare', value)} />
+            <MetricInput label="Work" helper="Move for this long" value={draft.work} unit="sec" min={1} max={3600} onChange={(value) => updateDraftMetric('work', value)} />
+            <MetricInput label="Rest" helper="Between rounds" value={draft.rest} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('rest', value)} />
+            <MetricInput label="Cooldown" helper="Once after the workout" value={draft.cooldown} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('cooldown', value)} />
           </div>
 
           <div className="editor-section-title"><span>Structure</span><small>REPEATS</small></div>
           <div className="metric-list">
-            <MetricInput label="Rounds" helper="One round is one Work interval" value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraft('rounds', value)} />
-            <MetricInput label="Cycles" helper={`One cycle repeats all ${draft.rounds} rounds`} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraft('cycles', value)} />
-            <MetricInput label="Rest between cycles" helper="Only inserted when cycles are 2 or more" value={draft.cycleRest} unit="sec" min={0} max={3600} onChange={(value) => updateDraft('cycleRest', value)} />
+            <MetricInput label="Rounds" helper="One round is one Work interval" value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraftMetric('rounds', value)} />
+            <MetricInput label="Cycles" helper={`One cycle repeats all ${draft.rounds} rounds`} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraftMetric('cycles', value)} />
+            <MetricInput label="Rest between cycles" helper="Only inserted when cycles are 2 or more" value={draft.cycleRest} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('cycleRest', value)} />
           </div>
 
           <aside className="cycle-explainer">
             <span className="explainer-number">?</span>
-            <div>
-              <strong>How cycles work</strong>
-              <p>Rounds are the Work intervals inside a block. A cycle repeats that whole block. The extra cycle rest is added only between blocks — never after the last one.</p>
-            </div>
+            <div><strong>How cycles work</strong><p>Rounds are the Work intervals inside a block. A cycle repeats that whole block. The extra cycle rest is added only between blocks — never after the last one.</p></div>
           </aside>
 
-          <div className="workout-summary">
-            <span>Estimated duration</span>
-            <strong>{formatTime(workoutDuration(draft))}</strong>
-          </div>
-
+          <div className="workout-summary"><span>Estimated duration</span><strong>{formatTime(workoutDuration(draft))}</strong></div>
           {draft.id && <button className="delete-button" onClick={deleteTimer}>Delete timer</button>}
         </section>
       </main>
@@ -561,9 +698,9 @@ export default function Home() {
     return (
       <main className="app-shell settings-screen">
         <header className="screen-header">
-          <button className="text-button muted" onClick={() => setScreen('home')}>Back</button>
+          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>Back</button>
           <div className="header-title"><span className="eyebrow">PREFERENCES</span><strong>Settings</strong></div>
-          <button className="text-button accent" onClick={() => setScreen('home')}>Done</button>
+          <button className="text-button accent" onClick={() => setScreen(returnScreen)}>Done</button>
         </header>
 
         <section className="settings-content">
@@ -573,9 +710,9 @@ export default function Home() {
               <div><strong>Sound effects</strong><small>Phase cues and finish signal</small></div>
               <Switch label="Sound effects" checked={settings.soundEnabled} onChange={(soundEnabled) => setSettings((current) => ({ ...current, soundEnabled }))} />
             </div>
-            <button className="setting-row setting-action" onClick={() => playCue('work')}>
+            <button className="setting-row setting-action" onClick={() => { void playCue('work'); }}>
               <div><strong>Sound scheme</strong><small>One built-in synthetic scheme</small></div>
-              <span className="setting-value">Pulse beep <i>▶</i></span>
+              <span className="setting-value">Pulse beep <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <label className="volume-row">
               <span className="volume-icon">−</span>
@@ -593,23 +730,34 @@ export default function Home() {
               <output>{Math.round(settings.volume * 100)}%</output>
             </label>
             <div className="setting-row">
-              <div><strong>Ticking sound</strong><small>Last five seconds of every interval</small></div>
+              <div><strong>Ticking sound</strong><small>One quiet tick every second</small></div>
               <Switch label="Ticking sound" checked={settings.ticking} onChange={(ticking) => setSettings((current) => ({ ...current, ticking }))} />
             </div>
+            <p className="setting-note">On iPhone, synthetic Web Audio respects Silent Mode. Turn Silent Mode off to hear Pulse cues.</p>
           </div>
 
           <div className="settings-group">
-            <p className="settings-kicker">VOICE & MUSIC</p>
-            <button className="setting-row setting-action" onClick={() => setVoiceInfoOpen((open) => !open)} aria-expanded={voiceInfoOpen}>
-              <div><strong>Voice</strong><small>Not included in this version</small></div>
-              <span className="coming-soon">Coming later <i>{voiceInfoOpen ? '−' : '+'}</i></span>
+            <p className="settings-kicker">COACH VOICE</p>
+            <div className="setting-row">
+              <div><strong>Voice coach</strong><small>Phase names and a spoken 3–2–1</small></div>
+              <Switch label="Voice coach" checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
+            </div>
+            <label className={`voice-select-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
+              <span><strong>System voice</strong><small>Available voices depend on this device</small></span>
+              <select
+                aria-label="Coach voice"
+                value={settings.voiceURI}
+                disabled={!settings.voiceEnabled}
+                onChange={(event) => setSettings((current) => ({ ...current, voiceURI: event.target.value }))}
+              >
+                <option value="">Device default</option>
+                {availableVoices.map((voice) => <option value={voice.voiceURI} key={voice.voiceURI}>{voice.name} · {voice.lang}</option>)}
+              </select>
+            </label>
+            <button className="setting-row setting-action" disabled={!settings.voiceEnabled} onClick={() => speak('Ready. Three, two, one. Work.', true)}>
+              <div><strong>Test coach</strong><small>Preview the selected voice</small></div>
+              <span className="setting-value">Play <i className="mini-play"><PlayGlyph /></i></span>
             </button>
-            {voiceInfoOpen && (
-              <div className="info-panel">
-                <strong>What multiple voices would involve</strong>
-                <p>The browser can use iOS system voices through Speech Synthesis, but the available names and quality change by device and language. A consistent voice catalogue would require bundled recordings or a text-to-speech service, plus downloads, locale choices, caching and a privacy decision.</p>
-              </div>
-            )}
             <div className="setting-row unavailable">
               <div><strong>Ducking</strong><small>Reduce other music during cues</small></div>
               <Switch label="Ducking unavailable" checked={settings.ducking} onChange={() => undefined} disabled />
@@ -642,10 +790,7 @@ export default function Home() {
       <main className={`runner-screen phase-${phaseClass}`}>
         <header className="runner-header">
           <button className="round-icon-button" onClick={leaveWorkout} aria-label="Back to timers">←</button>
-          <div>
-            <p>{activeTimer.name}</p>
-            <strong>{formatTime(totalRemaining)} left</strong>
-          </div>
+          <div><p>{activeTimer.name}</p><strong>{formatTime(totalRemaining)} left</strong></div>
           <button className="round-icon-button" onClick={resetWorkout} aria-label="Reset workout">↻</button>
         </header>
 
@@ -653,23 +798,24 @@ export default function Home() {
           <p className="phase-kicker">{finished ? 'SESSION' : PHASE_META[currentPhase?.kind ?? 'prepare'].short}</p>
           <h1>{finished ? 'Complete' : currentPhase?.label}</h1>
           <div className="giant-time">{finished ? '✓' : formatTime(remaining)}</div>
-          <div className="phase-progress" aria-label={`${Math.round(phaseProgress * 100)} percent complete`}>
-            <span style={{ width: `${phaseProgress * 100}%` }} />
-          </div>
+          {runnerMessage && !finished && (
+            <figure className={`runner-message ${currentPhase?.kind === 'cooldown' ? 'reflection' : ''}`}>
+              <blockquote>“{runnerMessage.text}”</blockquote>
+              <figcaption>— {runnerMessage.author}</figcaption>
+            </figure>
+          )}
+          <div className="phase-progress" aria-label={`${Math.round(phaseProgress * 100)} percent complete`}><span style={{ width: `${phaseProgress * 100}%` }} /></div>
         </section>
 
         <section className="runner-up-next">
-          <div>
-            <span>{finished ? 'Workout' : 'Up next'}</span>
-            <strong>{finished ? `${formatTime(workoutDuration(activeTimer))} total` : nextPhase ? `${nextPhase.label} · ${formatTime(nextPhase.duration)}` : 'Finish'}</strong>
-          </div>
+          <div><span>{finished ? 'Workout' : 'Up next'}</span><strong>{finished ? `${formatTime(workoutDuration(activeTimer))} total` : nextPhase ? `${nextPhase.label} · ${formatTime(nextPhase.duration)}` : 'Finish'}</strong></div>
           <div className="mini-progress" aria-hidden="true"><span style={{ width: `${phaseProgress * 100}%` }} /></div>
         </section>
 
         <section className="runner-controls">
           <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>Round / {activeTimer.rounds}</span></div>
-          <button className={`main-control ${running ? 'is-running' : ''}`} onClick={toggleWorkout} aria-label={finished ? 'Restart workout' : running ? 'Pause workout' : 'Start workout'}>
-            <span>{finished ? '↻' : running ? 'Ⅱ' : '▶'}</span>
+          <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? 'Restart workout' : running ? 'Pause workout' : 'Start workout'}>
+            <span>{finished ? '↻' : running ? <PauseGlyph /> : <PlayGlyph />}</span>
             <small>{finished ? 'Again' : running ? 'Pause' : phaseIndex === 0 && remaining === sequence[0]?.duration ? 'Start' : 'Resume'}</small>
           </button>
           <div className="runner-stat"><strong>{finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}</strong><span>Cycle / {activeTimer.cycles}</span></div>
@@ -678,14 +824,49 @@ export default function Home() {
     );
   }
 
+  if (screen === 'library') {
+    return (
+      <main className="app-shell library-screen">
+        <header className="screen-header">
+          <button className="text-button muted" onClick={() => setScreen('home')}>Home</button>
+          <div className="header-title"><span className="eyebrow">YOUR LIBRARY</span><strong>Timers</strong></div>
+          <button className="text-button accent" onClick={() => openEditor(undefined, 'library')}>New</button>
+        </header>
+
+        <section className="library-content">
+          <div className="library-intro"><div><p className="eyebrow">ALL PROGRAMS</p><h1>{timers.length} timers</h1></div><p>Run, edit, or move a timer. The first four become your Home shortcuts.</p></div>
+          <div className="library-list">
+            {timers.map((timer, index) => (
+              <article className="library-card" key={timer.id}>
+                <button className="library-run" onClick={() => beginWorkout(timer)} aria-label={`Start ${timer.name}`}>
+                  <TimerDetails timer={timer} index={index} />
+                  <span className="play-button"><PlayGlyph /></span>
+                </button>
+                <div className="library-actions">
+                  <button onClick={() => moveTimer(index, -1)} disabled={index === 0} aria-label={`Move ${timer.name} up`}>↑</button>
+                  <button onClick={() => moveTimer(index, 1)} disabled={index === timers.length - 1} aria-label={`Move ${timer.name} down`}>↓</button>
+                  <button className="edit-action" onClick={() => openEditor(timer, 'library')} aria-label={`Edit ${timer.name}`}>Edit</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <nav className="bottom-nav" aria-label="Primary navigation">
+          <button className="nav-item" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
+          <button className="nav-item active" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
+          <button className="nav-item" onClick={() => openSettings('library')}><span>⚙︎</span>Settings</button>
+        </nav>
+      </main>
+    );
+  }
+
+  const homeTimers = timers.slice(0, HOME_TIMER_LIMIT);
   return (
     <main className="app-shell home-screen">
       <header className="topbar">
-        <div className="brand-lockup">
-          <span className="brand-mark">P</span>
-          <div><p className="eyebrow">INTERVAL TRAINING</p><h1>Pulse</h1></div>
-        </div>
-        <button className="icon-button" aria-label="Open settings" onClick={() => setScreen('settings')}>⚙</button>
+        <div className="brand-lockup"><span className="brand-mark">P</span><div><p className="eyebrow">INTERVAL TRAINING</p><h1>Pulse</h1></div></div>
+        <button className="icon-button" aria-label="Open settings" onClick={() => openSettings('home')}>⚙︎</button>
       </header>
 
       <section className="hero" aria-labelledby="hero-title">
@@ -694,45 +875,33 @@ export default function Home() {
           <h2 id="hero-title">Make every<br />second count.</h2>
           <p>Build focused interval workouts and take them anywhere — even offline.</p>
         </div>
-        <button className="new-timer-button" onClick={() => openEditor()}>
-          <span className="plus">+</span>New timer
-        </button>
+        <button className="new-timer-button" onClick={() => openEditor(undefined, 'home')}><span className="plus">+</span>New timer</button>
       </section>
 
       <section className="workouts" aria-labelledby="workouts-title">
         <div className="section-heading">
-          <div><p className="eyebrow">YOUR LIBRARY</p><h2 id="workouts-title">My timers</h2></div>
-          <span className="count-badge">{timers.length}</span>
+          <div><p className="eyebrow">QUICK START</p><h2 id="workouts-title">My timers</h2></div>
+          <button className="manage-link" onClick={() => setScreen('library')}>Manage {timers.length} →</button>
         </div>
 
-        {timers.length === 0 ? (
-          <div className="empty-state"><strong>No timers yet</strong><p>Create one and it will stay saved on this device.</p><button onClick={() => openEditor()}>Create timer</button></div>
+        {homeTimers.length === 0 ? (
+          <div className="empty-state"><strong>No timers yet</strong><p>Create one and it will stay saved on this device.</p><button onClick={() => openEditor(undefined, 'home')}>Create timer</button></div>
         ) : (
           <div className="timer-list">
-            {timers.map((timer, index) => (
-              <article className="timer-card" key={timer.id}>
-                <button className="timer-edit-zone" onClick={() => openEditor(timer)} aria-label={`Edit ${timer.name}`}>
-                  <span className={`timer-number color-${index % 3}`}>{String(index + 1).padStart(2, '0')}</span>
-                  <span className="timer-info">
-                    <strong>{timer.name}</strong>
-                    <small>{formatTime(workoutDuration(timer))} · {timer.rounds} rounds · {timer.cycles} {timer.cycles === 1 ? 'cycle' : 'cycles'}</small>
-                    <span className="interval-row">
-                      <span><i className="dot work-dot" /> Work {formatCompact(timer.work)}</span>
-                      <span><i className="dot rest-dot" /> Rest {formatCompact(timer.rest)}</span>
-                    </span>
-                  </span>
-                </button>
-                <button className="play-button" aria-label={`Start ${timer.name}`} onClick={() => beginWorkout(timer)}>▶</button>
-              </article>
+            {homeTimers.map((timer, index) => (
+              <button className="timer-card timer-launch" key={timer.id} onClick={() => beginWorkout(timer)} aria-label={`Start ${timer.name}`}>
+                <TimerDetails timer={timer} index={index} />
+                <span className="play-button"><PlayGlyph /></span>
+              </button>
             ))}
           </div>
         )}
       </section>
 
       <nav className="bottom-nav" aria-label="Primary navigation">
-        <button className="nav-item active" onClick={() => setScreen('home')}><span>◴</span>Timers</button>
-        <button className="nav-item" onClick={() => openEditor()}><span>＋</span>Create</button>
-        <button className="nav-item" onClick={() => setScreen('settings')}><span>⚙</span>Settings</button>
+        <button className="nav-item active" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
+        <button className="nav-item" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
+        <button className="nav-item" onClick={() => openSettings('home')}><span>⚙︎</span>Settings</button>
       </nav>
     </main>
   );
