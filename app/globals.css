@@ -100,6 +100,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .icon-button:active, .play-button:active, .main-control:active { transform: scale(.96); }
+.app-icon { display: block; flex: 0 0 auto; }
 
 .hero {
   margin: 0 12px;
@@ -169,7 +170,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .home-progress-stat { display: grid; justify-items: end; gap: 2px; padding-left: 18px; border-left: 1px solid #3a4143; }
 .home-progress-stat span { font-size: 24px; font-weight: 1000; line-height: 1; }
 .home-progress-stat small { color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
-.home-progress-arrow { color: var(--lime); font-size: 23px; }
+.home-progress-arrow { display: grid; place-items: center; color: var(--lime); }
 .home-progress-card:active { transform: scale(.985); background: #242b2d; }
 .workouts { padding: 26px 20px 20px; }
 
@@ -192,6 +193,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .manage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 8px 0;
   border: 0;
   color: var(--lime);
@@ -314,7 +318,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-size: 10px;
   font-weight: 850;
 }
-.nav-item span { font-size: 22px; line-height: 1; }
+.nav-item > .app-icon { width: 22px; height: 22px; }
 .nav-item.active { color: var(--lime); }
 
 /* Shared secondary screens */
@@ -492,11 +496,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .runner-header > div { min-width: 0; text-align: center; }
 .runner-header p { overflow: hidden; margin: 0 0 4px; color: var(--phase); font-size: 16px; font-weight: 950; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
 .runner-header strong { color: #9da3a2; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
-.round-icon-button { width: 47px; height: 47px; border: 1px solid #383d3f; border-radius: 50%; color: var(--phase); background: #202426; font-size: 22px; }
+.round-icon-button { display: grid; place-items: center; width: 47px; height: 47px; border: 1px solid #383d3f; border-radius: 50%; color: var(--phase); background: #202426; }
 .runner-main { display: grid; grid-template-rows: auto auto 1fr auto auto auto; justify-items: center; align-items: center; padding: 26px 18px 17px; }
 .phase-kicker { margin: 0; padding: 6px 10px; border: 1px solid rgb(18 20 22 / 24%); border-radius: 99px; font-size: 10px; font-weight: 1000; letter-spacing: .15em; }
 .runner-main h1 { margin: 11px 0 0; font-size: clamp(52px, 15vw, 90px); font-weight: 1000; letter-spacing: -.08em; line-height: .9; text-transform: uppercase; }
-.giant-time { align-self: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(105px, 31vw, 225px); font-weight: 900; letter-spacing: -.09em; line-height: .82; }
+.giant-time { display: grid; place-items: center; align-self: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(105px, 31vw, 225px); font-weight: 900; letter-spacing: -.09em; line-height: .82; }
 .runner-message { width: min(570px, 100%); margin: 9px 0 18px; padding: 15px 18px; border: 1px solid rgb(18 20 22 / 20%); border-radius: 17px; background: rgb(255 255 255 / 18%); text-align: center; }
 .runner-message blockquote { margin: 0; font-size: clamp(15px, 4vw, 20px); font-weight: 850; line-height: 1.22; letter-spacing: -.025em; }
 .runner-message figcaption { margin-top: 7px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
@@ -504,7 +508,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .completion-progress-card { display: grid; justify-items: center; gap: 6px; width: min(520px, 100%); margin: 0 0 16px; padding: 15px 18px; border: 1px solid rgb(18 20 22 / 20%); border-radius: 18px; background: rgb(255 255 255 / 25%); text-align: center; }
 .completion-progress-card strong { font-size: 19px; letter-spacing: -.03em; }
 .completion-progress-card span { font-size: 11px; font-weight: 800; }
-.completion-progress-card button { padding: 5px 0; border: 0; color: var(--ink); background: transparent; font-size: 11px; font-weight: 1000; text-transform: uppercase; letter-spacing: .06em; }
+.completion-progress-card button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 0; border: 0; color: var(--ink); background: transparent; font-size: 11px; font-weight: 1000; text-transform: uppercase; letter-spacing: .06em; }
 .phase-progress { width: min(560px, 100%); height: 8px; overflow: hidden; border-radius: 99px; background: rgb(18 20 22 / 18%); }
 .phase-progress span { display: block; height: 100%; background: var(--ink); transition: width .15s linear; }
 .runner-up-next { display: grid; grid-template-columns: 1fr minmax(70px, 32%); align-items: center; gap: 16px; min-height: 86px; padding: 16px 22px; border-top: 1px solid rgb(18 20 22 / 13%); background: rgb(255 255 255 / 14%); }
@@ -531,7 +535,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .progress-total strong { font-size: clamp(76px, 22vw, 126px); font-weight: 1000; line-height: .7; letter-spacing: -.095em; }
 .progress-total span { margin-bottom: 2px; font-size: 13px; font-weight: 1000; letter-spacing: .1em; }
 .progress-hero-copy > p:last-child { margin: 17px 0 0; color: #3c4427; font-size: 12px; font-weight: 800; }
-.progress-hero-mark { align-self: start; font-size: 47px; font-weight: 1000; line-height: .8; }
+.progress-hero-mark { align-self: start; color: #252b20; }
 .period-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 12px 0 27px; padding: 5px; border: 1px solid #303638; border-radius: 15px; background: #191d1f; }
 .period-tabs button { min-height: 40px; border: 0; border-radius: 10px; color: #858b8c; background: transparent; font-size: 10px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
 .period-tabs button.selected { color: var(--ink); background: var(--lime); }
@@ -548,8 +552,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .activity-column.current small { color: var(--lime); }
 .consistency-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .consistency-card { position: relative; display: grid; min-height: 174px; overflow: hidden; padding: 17px; border: 1px solid #303638; border-radius: 22px; background: var(--ink-soft); }
-.consistency-card > span { position: absolute; top: 14px; right: 15px; color: var(--red); font-size: 25px; }
-.goal-card > span { color: var(--blue); }
+.consistency-card > .app-icon { position: absolute; top: 14px; right: 15px; color: var(--red); }
+.goal-card > .app-icon { color: var(--blue); }
 .consistency-card strong { align-self: end; color: white; font-size: 54px; line-height: .85; letter-spacing: -.08em; }
 .consistency-card p { margin: 8px 0 0; font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: .035em; }
 .consistency-card small { align-self: end; margin-top: 13px; color: var(--muted); font-size: 9px; font-weight: 800; }
@@ -575,7 +579,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .history-session-meta > span { color: #b9bfbd; font-size: 9px; font-weight: 900; }
 .history-session-meta button { padding: 2px 0; border: 0; color: #ff8176; background: transparent; font-size: 8px; font-weight: 900; text-transform: uppercase; }
 .progress-empty-state { display: grid; justify-items: center; padding: 38px 25px; border: 1px dashed #3b4244; border-radius: 22px; color: var(--muted); text-align: center; }
-.progress-empty-state > span { color: var(--lime); font-size: 41px; }
+.progress-empty-state > .app-icon { color: var(--lime); }
 .progress-empty-state strong { margin-top: 11px; color: white; font-size: 19px; }
 .progress-empty-state p { max-width: 300px; margin: 8px 0 18px; font-size: 12px; line-height: 1.45; }
 .progress-empty-state button { padding: 11px 15px; border: 0; border-radius: 11px; color: var(--ink); background: var(--lime); font-size: 11px; font-weight: 950; text-transform: uppercase; }
@@ -589,7 +593,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .library-run { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; width: 100%; padding: 11px 12px 10px 10px; border: 0; color: white; background: transparent; text-align: left; }
 .library-run:active { background: #202527; }
 .library-actions { display: grid; grid-template-columns: 48px 48px 1fr; border-top: 1px solid #2d3234; }
-.library-actions button { min-height: 42px; border: 0; border-right: 1px solid #2d3234; color: #c4c9c8; background: #171a1c; font-size: 18px; font-weight: 900; }
+.library-actions button { display: grid; place-items: center; min-height: 42px; border: 0; border-right: 1px solid #2d3234; color: #c4c9c8; background: #171a1c; font-size: 18px; font-weight: 900; }
 .library-actions button:disabled { color: #454a4c; cursor: not-allowed; }
 .library-actions .edit-action { border-right: 0; color: var(--lime); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 

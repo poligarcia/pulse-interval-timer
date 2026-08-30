@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { AppIcon } from '@/components/AppIcon';
 import {
   calculateProgressStreaks,
   groupWorkoutHistory,
@@ -73,7 +74,7 @@ export function ProgressScreen({
             <div className="progress-total"><strong>{displayMinutes(summary.totalSeconds)}</strong><span>MIN</span></div>
             <p>{formatDuration(summary.activeWorkSeconds)} active work across {plural(summary.workouts, 'workout')}.</p>
           </div>
-          <div className="progress-hero-mark" aria-hidden="true">↗</div>
+          <div className="progress-hero-mark"><AppIcon name="progress" size={52} strokeWidth={2.25} /></div>
         </div>
 
         <div className="period-tabs" role="tablist" aria-label="Progress period">
@@ -121,13 +122,13 @@ export function ProgressScreen({
           </div>
           <div className="consistency-grid">
             <article className="consistency-card flame-card">
-              <span aria-hidden="true">◆</span>
+              <AppIcon name="flame" size={27} strokeWidth={2} />
               <strong>{streaks.currentActiveDays}</strong>
               <p>active-day streak</p>
               <small>Best: {plural(streaks.longestActiveDays, 'day')}</small>
             </article>
             <article className="consistency-card goal-card">
-              <span aria-hidden="true">◎</span>
+              <AppIcon name="target" size={27} strokeWidth={2} />
               <strong>{streaks.workoutsThisWeek}/{streaks.weeklyGoal}</strong>
               <p>weekly workouts</p>
               <small>{plural(streaks.weeklyGoalStreak, 'goal week')} in a row</small>
@@ -143,7 +144,7 @@ export function ProgressScreen({
 
           {history.length === 0 ? (
             <div className="progress-empty-state">
-              <span aria-hidden="true">◷</span>
+              <AppIcon name="history" size={43} strokeWidth={1.6} />
               <strong>Your first workout starts the story.</strong>
               <p>Complete a timer and Pulse will add it here automatically.</p>
               <button onClick={onTimers}>Choose a timer</button>
@@ -186,10 +187,10 @@ export function ProgressScreen({
       </section>
 
       <nav className="bottom-nav" aria-label="Primary navigation">
-        <button className="nav-item" onClick={onHome}><span>⌂</span>Home</button>
-        <button className="nav-item" onClick={onTimers}><span>◴</span>Timers</button>
-        <button className="nav-item active"><span>↗</span>Progress</button>
-        <button className="nav-item" onClick={onSettings}><span>⚙︎</span>Settings</button>
+        <button className="nav-item" onClick={onHome}><AppIcon name="home" />Home</button>
+        <button className="nav-item" onClick={onTimers}><AppIcon name="timer" />Timers</button>
+        <button className="nav-item active"><AppIcon name="progress" />Progress</button>
+        <button className="nav-item" onClick={onSettings}><AppIcon name="settings" />Settings</button>
       </nav>
     </main>
   );

@@ -36,6 +36,7 @@ import {
 } from '@/progress';
 import type { WorkoutSession } from '@/progress';
 import { ProgressScreen } from '@/progress/ProgressScreen';
+import { AppIcon } from '@/components/AppIcon';
 
 type TimerConfig = {
   id: string;
@@ -75,7 +76,7 @@ type WorkoutPhase = {
 type ScreenName = 'home' | 'library' | 'progress' | 'editor' | 'runner' | 'settings';
 type ReturnScreen = 'home' | 'library' | 'progress';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
@@ -1199,20 +1200,20 @@ export default function Home() {
     return (
       <main className={`runner-screen phase-${phaseClass}`}>
         <header className="runner-header">
-          <button className="round-icon-button" onClick={leaveWorkout} aria-label="Back to timers">←</button>
+          <button className="round-icon-button" onClick={leaveWorkout} aria-label="Back to timers"><AppIcon name="arrow-left" /></button>
           <div><p>{activeTimer.name}</p><strong>{formatTime(totalRemaining)} left</strong></div>
-          <button className="round-icon-button" onClick={resetWorkout} aria-label="Reset workout">↻</button>
+          <button className="round-icon-button" onClick={resetWorkout} aria-label="Reset workout"><AppIcon name="reset" /></button>
         </header>
 
         <section className="runner-main" aria-live="polite" aria-atomic="true">
           <p className="phase-kicker">{finished ? 'SESSION' : PHASE_META[currentPhase?.kind ?? 'prepare'].short}</p>
           <h1>{finished ? 'Complete' : currentPhase?.label}</h1>
-          <div className="giant-time">{finished ? '✓' : formatTime(remaining)}</div>
+          <div className="giant-time">{finished ? <AppIcon name="check" size={132} strokeWidth={2.2} /> : formatTime(remaining)}</div>
           {finished && (
             <div className="completion-progress-card">
               <strong>+{formatTime(workoutDuration(activeTimer))} training</strong>
               <span>{progressStreaks.workoutsThisWeek} of {progressStreaks.weeklyGoal} workouts this week · {progressStreaks.currentActiveDays}-day streak</span>
-              <button onClick={() => setScreen('progress')}>View progress →</button>
+              <button onClick={() => setScreen('progress')}>View progress <AppIcon name="arrow-right" size={14} /></button>
             </div>
           )}
           {runnerMessage && (
@@ -1232,7 +1233,7 @@ export default function Home() {
         <section className="runner-controls">
           <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>Round / {activeTimer.rounds}</span></div>
           <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? 'Restart workout' : running ? 'Pause workout' : 'Start workout'}>
-            <span>{finished ? '↻' : running ? <PauseGlyph /> : <PlayGlyph />}</span>
+            <span>{finished ? <AppIcon name="reset" size={34} /> : running ? <PauseGlyph /> : <PlayGlyph />}</span>
             <small>{finished ? 'Again' : running ? 'Pause' : phaseIndex === 0 && remaining === sequence[0]?.duration ? 'Start' : 'Resume'}</small>
           </button>
           <div className="runner-stat"><strong>{finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}</strong><span>Cycle / {activeTimer.cycles}</span></div>
@@ -1260,8 +1261,8 @@ export default function Home() {
                   <span className="play-button"><PlayGlyph /></span>
                 </button>
                 <div className="library-actions">
-                  <button onClick={() => moveTimer(index, -1)} disabled={index === 0} aria-label={`Move ${timer.name} up`}>↑</button>
-                  <button onClick={() => moveTimer(index, 1)} disabled={index === timers.length - 1} aria-label={`Move ${timer.name} down`}>↓</button>
+                  <button onClick={() => moveTimer(index, -1)} disabled={index === 0} aria-label={`Move ${timer.name} up`}><AppIcon name="chevron-up" size={18} /></button>
+                  <button onClick={() => moveTimer(index, 1)} disabled={index === timers.length - 1} aria-label={`Move ${timer.name} down`}><AppIcon name="chevron-down" size={18} /></button>
                   <button className="edit-action" onClick={() => openEditor(timer, 'library')} aria-label={`Edit ${timer.name}`}>Edit</button>
                 </div>
               </article>
@@ -1270,10 +1271,10 @@ export default function Home() {
         </section>
 
         <nav className="bottom-nav" aria-label="Primary navigation">
-          <button className="nav-item" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
-          <button className="nav-item active" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
-          <button className="nav-item" onClick={() => setScreen('progress')}><span>↗</span>Progress</button>
-          <button className="nav-item" onClick={() => openSettings('library')}><span>⚙︎</span>Settings</button>
+          <button className="nav-item" onClick={() => setScreen('home')}><AppIcon name="home" />Home</button>
+          <button className="nav-item active" onClick={() => setScreen('library')}><AppIcon name="timer" />Timers</button>
+          <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />Progress</button>
+          <button className="nav-item" onClick={() => openSettings('library')}><AppIcon name="settings" />Settings</button>
         </nav>
       </main>
     );
@@ -1284,7 +1285,7 @@ export default function Home() {
     <main className="app-shell home-screen">
       <header className="topbar">
         <div className="brand-lockup"><span className="brand-mark">P</span><div><p className="eyebrow">INTERVAL TRAINING</p><h1>Pulse</h1></div></div>
-        <button className="icon-button" aria-label="Open settings" onClick={() => openSettings('home')}>⚙︎</button>
+        <button className="icon-button" aria-label="Open settings" onClick={() => openSettings('home')}><AppIcon name="settings" /></button>
       </header>
 
       <section className="hero" aria-labelledby="hero-title">
@@ -1306,14 +1307,14 @@ export default function Home() {
             <span>{progressStreaks.currentActiveDays}</span>
             <small>day streak</small>
           </div>
-          <span className="home-progress-arrow" aria-hidden="true">→</span>
+          <span className="home-progress-arrow"><AppIcon name="arrow-right" size={20} /></span>
         </button>
       </section>
 
       <section className="workouts" aria-labelledby="workouts-title">
         <div className="section-heading">
           <div><p className="eyebrow">QUICK START</p><h2 id="workouts-title">Recent timers</h2></div>
-          <button className="manage-link" onClick={() => setScreen('library')}>Manage {timers.length} →</button>
+          <button className="manage-link" onClick={() => setScreen('library')}>Manage {timers.length} <AppIcon name="arrow-right" size={13} /></button>
         </div>
 
         {homeTimers.length === 0 ? (
@@ -1331,10 +1332,10 @@ export default function Home() {
       </section>
 
       <nav className="bottom-nav" aria-label="Primary navigation">
-        <button className="nav-item active" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
-        <button className="nav-item" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
-        <button className="nav-item" onClick={() => setScreen('progress')}><span>↗</span>Progress</button>
-        <button className="nav-item" onClick={() => openSettings('home')}><span>⚙︎</span>Settings</button>
+        <button className="nav-item active" onClick={() => setScreen('home')}><AppIcon name="home" />Home</button>
+        <button className="nav-item" onClick={() => setScreen('library')}><AppIcon name="timer" />Timers</button>
+        <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />Progress</button>
+        <button className="nav-item" onClick={() => openSettings('home')}><AppIcon name="settings" />Settings</button>
       </nav>
     </main>
   );
