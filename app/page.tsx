@@ -28,6 +28,14 @@ import type {
   PhaseKind,
   VoicePreference,
 } from '@/coach';
+import {
+  calculateProgressStreaks,
+  createWorkoutSession,
+  parseWorkoutSessions,
+  summarizeProgress,
+} from '@/progress';
+import type { WorkoutSession } from '@/progress';
+import { ProgressScreen } from '@/progress/ProgressScreen';
 
 type TimerConfig = {
   id: string;
@@ -64,15 +72,16 @@ type WorkoutPhase = {
   cycle: number;
 };
 
-type ScreenName = 'home' | 'library' | 'editor' | 'runner' | 'settings';
-type ReturnScreen = 'home' | 'library';
+type ScreenName = 'home' | 'library' | 'progress' | 'editor' | 'runner' | 'settings';
+type ReturnScreen = 'home' | 'library' | 'progress';
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
 const DISPLAY_MESSAGE_MEMORY_STORAGE = 'pulse-display-message-memory-v1';
 const RECENT_TIMERS_STORAGE = 'pulse-recent-timers-v1';
+const WORKOUT_SESSIONS_STORAGE = 'pulse-workout-sessions-v1';
 const HOME_TIMER_LIMIT = 4;
 const RECOVERY_SPEECH_PAUSE_MS = 400;
 
@@ -165,6 +174,12 @@ function formatTime(seconds: number) {
 function formatCompact(seconds: number) {
   if (seconds < 60) return `${seconds}s`;
   return formatTime(seconds);
+}
+
+function formatProgressMinutes(seconds: number) {
+  if (seconds <= 0) return '0';
+  if (seconds < 60) return '<1';
+  return String(Math.round(seconds / 60));
 }
 
 function workoutDuration(timer: TimerConfig) {
@@ -326,6 +341,7 @@ export default function Home() {
   const [returnScreen, setReturnScreen] = useState<ReturnScreen>('home');
   const [timers, setTimers] = useState<TimerConfig[]>(DEFAULT_TIMERS);
   const [recentTimerIds, setRecentTimerIds] = useState<string[]>([]);
+  const [workoutSessions, setWorkoutSessions] = useState<WorkoutSession[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [draft, setDraft] = useState<TimerConfig>(makeEmptyTimer());
   const [activeTimer, setActiveTimer] = useState<TimerConfig>(DEFAULT_TIMERS[0]);
@@ -352,6 +368,8 @@ export default function Home() {
   const wakeLockWantedRef = useRef(false);
   const coachSpeechGenerationRef = useRef(0);
   const pendingCoachSpeechTimeoutRef = useRef<number | null>(null);
+  const workoutStartedAtRef = useRef<string | null>(null);
+  const recordedWorkoutSessionIdRef = useRef<string | null>(null);
 
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
   const currentPhase = sequence[phaseIndex];
@@ -363,11 +381,13 @@ export default function Home() {
   useEffect(() => {
     let storedTimers: TimerConfig[] | null = null;
     let storedRecentTimerIds: string[] | null = null;
+    let storedWorkoutSessions: WorkoutSession[] | null = null;
     let storedSettings: Settings | null = null;
     try {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
       const savedRecentTimerIds = window.localStorage.getItem(RECENT_TIMERS_STORAGE);
+      const savedWorkoutSessions = window.localStorage.getItem(WORKOUT_SESSIONS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
       const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
       if (savedTimers) {
@@ -383,6 +403,9 @@ export default function Home() {
           storedRecentTimerIds = parsed.filter((id): id is string => typeof id === 'string');
         }
       }
+      if (savedWorkoutSessions) {
+        storedWorkoutSessions = parseWorkoutSessions(JSON.parse(savedWorkoutSessions));
+      }
       if (savedSettings) storedSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
       if (savedDisplayMessageMemory) {
         displayMessageMemoryRef.current = createDisplayMessageMemory(JSON.parse(savedDisplayMessageMemory));
@@ -394,6 +417,7 @@ export default function Home() {
     window.queueMicrotask(() => {
       if (storedTimers) setTimers(storedTimers);
       if (storedRecentTimerIds) setRecentTimerIds(storedRecentTimerIds);
+      if (storedWorkoutSessions) setWorkoutSessions(storedWorkoutSessions);
       if (storedSettings) setSettings(storedSettings);
       setHydrated(true);
     });
@@ -417,6 +441,15 @@ export default function Home() {
     if (!hydrated) return;
     window.localStorage.setItem(SETTINGS_STORAGE, JSON.stringify(settings));
   }, [settings, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(WORKOUT_SESSIONS_STORAGE, JSON.stringify(workoutSessions));
+    } catch {
+      // The current session still completes if local storage is unavailable or full.
+    }
+  }, [hydrated, workoutSessions]);
 
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
@@ -645,12 +678,26 @@ export default function Home() {
     return runnerSelection;
   }, []);
 
+  const recordCompletedWorkout = useCallback(() => {
+    if (recordedWorkoutSessionIdRef.current) return;
+    const completedAt = new Date();
+    const fallbackStart = new Date(completedAt.getTime() - workoutDuration(activeTimer) * 1000);
+    const storedStart = workoutStartedAtRef.current
+      ? new Date(workoutStartedAtRef.current)
+      : fallbackStart;
+    const startedAt = Number.isFinite(storedStart.getTime()) ? storedStart : fallbackStart;
+    const session = createWorkoutSession(activeTimer, startedAt, completedAt);
+    recordedWorkoutSessionIdRef.current = session.id;
+    setWorkoutSessions((current) => [session, ...current]);
+  }, [activeTimer]);
+
   const finishPhase = useCallback(() => {
     if (transitionLockRef.current) return;
     transitionLockRef.current = true;
     const nextIndex = phaseIndex + 1;
 
     if (nextIndex >= sequence.length) {
+      recordCompletedWorkout();
       setRunning(false);
       setFinished(true);
       setRemaining(0);
@@ -680,7 +727,7 @@ export default function Home() {
       );
     }
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
+  }, [announcePhase, phaseIndex, playCue, recordCompletedWorkout, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -789,6 +836,8 @@ export default function Home() {
   const beginWorkout = (timer: TimerConfig) => {
     const firstSequence = buildSequence(timer);
     setRecentTimerIds((current) => [timer.id, ...current.filter((id) => id !== timer.id)].slice(0, HOME_TIMER_LIMIT));
+    workoutStartedAtRef.current = null;
+    recordedWorkoutSessionIdRef.current = null;
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
@@ -804,6 +853,8 @@ export default function Home() {
 
   const toggleWorkout = async () => {
     if (finished) {
+      workoutStartedAtRef.current = null;
+      recordedWorkoutSessionIdRef.current = null;
       activeCoachRef.current = null;
       coachMemoryRef.current = createCoachMemory();
       setRunnerMessageSelection(null);
@@ -821,6 +872,7 @@ export default function Home() {
       releaseWakeLock();
     } else {
       await ensureAudio();
+      if (!workoutStartedAtRef.current) workoutStartedAtRef.current = new Date().toISOString();
       resolveWorkoutCoach();
       deadlineRef.current = Date.now() + remaining * 1000;
       lastTickSecondRef.current = remaining;
@@ -841,6 +893,8 @@ export default function Home() {
   };
 
   const resetWorkout = () => {
+    workoutStartedAtRef.current = null;
+    recordedWorkoutSessionIdRef.current = null;
     setRunning(false);
     setFinished(false);
     activeCoachRef.current = null;
@@ -854,6 +908,8 @@ export default function Home() {
   };
 
   const leaveWorkout = () => {
+    workoutStartedAtRef.current = null;
+    recordedWorkoutSessionIdRef.current = null;
     setRunning(false);
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
@@ -867,6 +923,13 @@ export default function Home() {
   const openSettings = (origin: ReturnScreen) => {
     setReturnScreen(origin);
     setScreen('settings');
+  };
+
+  const deleteWorkoutSession = (sessionId: string) => {
+    const session = workoutSessions.find((candidate) => candidate.id === sessionId);
+    if (!session) return;
+    if (!window.confirm(`Delete ${session.timerName} from workout history?`)) return;
+    setWorkoutSessions((current) => current.filter((candidate) => candidate.id !== sessionId));
   };
 
   const previewCoach = () => {
@@ -901,6 +964,8 @@ export default function Home() {
   const runnerMessage = runnerMessageSelection?.phaseIndex === phaseIndex && runnerMessageSelection.kind === currentMessageKind
     ? runnerMessageSelection.message
     : null;
+  const thisWeekProgress = summarizeProgress(workoutSessions, 'week');
+  const progressStreaks = calculateProgressStreaks(workoutSessions);
 
   if (screen === 'editor') {
     return (
@@ -1116,6 +1181,18 @@ export default function Home() {
     );
   }
 
+  if (screen === 'progress') {
+    return (
+      <ProgressScreen
+        sessions={workoutSessions}
+        onHome={() => setScreen('home')}
+        onTimers={() => setScreen('library')}
+        onSettings={() => openSettings('progress')}
+        onDeleteSession={deleteWorkoutSession}
+      />
+    );
+  }
+
   if (screen === 'runner') {
     const phaseKind = finished ? 'complete' : currentPhase?.kind ?? 'prepare';
     const phaseClass = phaseKind === 'complete' ? 'complete' : phaseKind;
@@ -1131,6 +1208,13 @@ export default function Home() {
           <p className="phase-kicker">{finished ? 'SESSION' : PHASE_META[currentPhase?.kind ?? 'prepare'].short}</p>
           <h1>{finished ? 'Complete' : currentPhase?.label}</h1>
           <div className="giant-time">{finished ? '✓' : formatTime(remaining)}</div>
+          {finished && (
+            <div className="completion-progress-card">
+              <strong>+{formatTime(workoutDuration(activeTimer))} training</strong>
+              <span>{progressStreaks.workoutsThisWeek} of {progressStreaks.weeklyGoal} workouts this week · {progressStreaks.currentActiveDays}-day streak</span>
+              <button onClick={() => setScreen('progress')}>View progress →</button>
+            </div>
+          )}
           {runnerMessage && (
             <figure className={`runner-message ${currentPhase?.kind === 'cooldown' ? 'reflection' : ''}`}>
               <blockquote>“{runnerMessage.text}”</blockquote>
@@ -1188,6 +1272,7 @@ export default function Home() {
         <nav className="bottom-nav" aria-label="Primary navigation">
           <button className="nav-item" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
           <button className="nav-item active" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
+          <button className="nav-item" onClick={() => setScreen('progress')}><span>↗</span>Progress</button>
           <button className="nav-item" onClick={() => openSettings('library')}><span>⚙︎</span>Settings</button>
         </nav>
       </main>
@@ -1209,6 +1294,20 @@ export default function Home() {
           <p>Build focused interval workouts and take them anywhere — even offline.</p>
         </div>
         <button className="new-timer-button" onClick={() => openEditor(undefined, 'home')}><span className="plus">+</span>New timer</button>
+      </section>
+
+      <section className="home-progress" aria-label="Weekly progress">
+        <button className="home-progress-card" onClick={() => setScreen('progress')}>
+          <div>
+            <p className="eyebrow">THIS WEEK</p>
+            <strong>{formatProgressMinutes(thisWeekProgress.totalSeconds)}<small> min</small></strong>
+          </div>
+          <div className="home-progress-stat">
+            <span>{progressStreaks.currentActiveDays}</span>
+            <small>day streak</small>
+          </div>
+          <span className="home-progress-arrow" aria-hidden="true">→</span>
+        </button>
       </section>
 
       <section className="workouts" aria-labelledby="workouts-title">
@@ -1234,6 +1333,7 @@ export default function Home() {
       <nav className="bottom-nav" aria-label="Primary navigation">
         <button className="nav-item active" onClick={() => setScreen('home')}><span>⌂</span>Home</button>
         <button className="nav-item" onClick={() => setScreen('library')}><span>◴</span>Timers</button>
+        <button className="nav-item" onClick={() => setScreen('progress')}><span>↗</span>Progress</button>
         <button className="nav-item" onClick={() => openSettings('home')}><span>⚙︎</span>Settings</button>
       </nav>
     </main>

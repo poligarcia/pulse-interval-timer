@@ -12,6 +12,12 @@ Pulse is an installable interval-timer PWA built for iPhone, desktop browsers an
 
 Timers, their order and settings are stored locally in the browser. They are not synced to another browser or device.
 
+## Progress
+
+Pulse records a workout when its final phase completes. The Progress screen summarizes total training time, active Work time, completed workouts and active days across day, week and month views. It also shows active-day and weekly-goal streaks plus a reverse-chronological workout journal.
+
+Workout history is stored locally on the current browser or installed PWA. Editing or deleting a timer does not rewrite past sessions because each history entry keeps a snapshot of the timer that was completed. Reset or abandoned workouts are not added to Progress.
+
 ## Audio on iPhone
 
 Pulse sound effects use the Web Audio API. On iPhone, Web Audio follows the device's **Silent Mode**, so cues and ticking are muted while the crossed-out bell is visible—even if media volume is raised. Turn Silent Mode off from Control Center or the Action button, then tap Start or an audio preview to unlock sound for the session. Chrome on iOS follows the same system behavior.
