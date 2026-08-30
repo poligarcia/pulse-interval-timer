@@ -426,6 +426,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .personality-grid button small { color: var(--muted); font-size: 9px; line-height: 1.25; }
 .personality-grid button.selected, .preference-grid button.selected { border-color: var(--lime); color: var(--ink); background: var(--lime); }
 .personality-grid button.selected small { color: #3b451f; }
+.personality-grid .surprise-personality { grid-column: 1 / -1; min-height: 64px; }
 .coach-choice-section:disabled button { cursor: not-allowed; }
 .preference-grid { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1px solid #41484b; border-radius: 12px; }
 .preference-grid button { min-height: 43px; padding: 8px 5px; border: 0; border-right: 1px solid #41484b; color: #c8cccb; background: #202527; font-size: 10px; font-weight: 900; }
@@ -439,6 +440,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .version-card > div { display: grid; gap: 3px; }
 .version-card strong { font-size: 16px; }
 .version-card small { color: var(--muted); font-size: 11px; }
+.version-card a { color: inherit; text-underline-offset: 2px; }
 
 /* Workout runner */
 .runner-screen {

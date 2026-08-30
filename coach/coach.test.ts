@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deriveCoachContext } from './context.ts';
 import { createCoachMemory, planCoachIntervention } from './interventions.ts';
+import { resolveCoachPersonality } from './personalities.ts';
 import type { CoachContext, SystemVoiceLike } from './types.ts';
 import { classifyVoice, curateVoices, resolveActiveCoach } from './voices.ts';
 
@@ -98,6 +99,12 @@ test('automatic selection avoids the previous workout voice when possible', () =
     random: () => 0,
   });
   assert.equal(selected.voiceURI, 'daniel');
+});
+
+test('surprise personality resolves once to a concrete personality', () => {
+  assert.equal(resolveCoachPersonality('surprise', () => 0), 'focused');
+  assert.equal(resolveCoachPersonality('surprise', () => 0.999), 'calm');
+  assert.equal(resolveCoachPersonality('tough', () => 0), 'tough');
 });
 
 test('interventions are considered once per phase and honor cooldown memory', () => {

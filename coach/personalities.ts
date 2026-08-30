@@ -2,6 +2,7 @@ import type {
   CoachContext,
   CoachIntent,
   CoachPersonalityId,
+  CoachPersonalityPreference,
   CoachPhrase,
   CoachSpeech,
   PhaseKind,
@@ -147,6 +148,16 @@ export const COACH_PERSONALITIES: Record<CoachPersonalityId, CoachPersonality> =
     ],
   },
 };
+
+export function resolveCoachPersonality(
+  preference: CoachPersonalityPreference,
+  random: () => number = Math.random,
+): CoachPersonalityId {
+  if (preference !== 'surprise') return preference;
+  const personalities = Object.keys(COACH_PERSONALITIES) as CoachPersonalityId[];
+  const index = Math.min(personalities.length - 1, Math.floor(random() * personalities.length));
+  return personalities[Math.max(0, index)];
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));

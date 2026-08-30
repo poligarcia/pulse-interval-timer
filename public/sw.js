@@ -1,7 +1,8 @@
-const CACHE_NAME = 'pulse-v3';
+const CACHE_NAME = 'pulse-v4';
 const APP_SHELL = [
   './',
   './manifest.webmanifest',
+  './third-party-notices.txt',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',

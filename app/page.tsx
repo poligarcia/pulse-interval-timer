@@ -5,19 +5,25 @@ import type { CSSProperties } from 'react';
 import {
   COACH_PERSONALITIES,
   createCoachMemory,
+  createDisplayMessageMemory,
   curateVoices,
   deriveCoachContext,
   makeCountdownSpeech,
   makePreviewSpeech,
   planCoachIntervention,
   resolveActiveCoach,
+  resolveCoachPersonality,
+  selectDisplayMessage,
   selectPhaseSpeech,
 } from '@/coach';
 import type {
   ActiveCoach,
   CoachMemory,
-  CoachPersonalityId,
+  CoachPersonalityPreference,
   CoachSpeech,
+  DisplayMessage,
+  DisplayMessageKind,
+  DisplayMessageMemory,
   PhaseKind,
   VoicePreference,
 } from '@/coach';
@@ -41,7 +47,7 @@ type Settings = {
   ticking: boolean;
   voiceEnabled: boolean;
   voiceURI: string;
-  coachPersonality: CoachPersonalityId;
+  coachPersonality: CoachPersonalityPreference;
   voicePreference: VoicePreference;
   lastAutomaticVoiceURI: string;
   ducking: boolean;
@@ -63,6 +69,7 @@ const APP_VERSION = '1.2.0';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
+const DISPLAY_MESSAGE_MEMORY_STORAGE = 'pulse-display-message-memory-v1';
 const HOME_TIMER_LIMIT = 4;
 
 function generatedTimerName(timer: Pick<TimerConfig, 'work' | 'rest' | 'rounds' | 'cycles'>) {
@@ -137,20 +144,6 @@ const PHASE_META: Record<PhaseKind, { label: string; short: string }> = {
   cycleRest: { label: 'Cycle rest', short: 'Reset' },
   cooldown: { label: 'Cooldown', short: 'Breathe' },
 };
-
-const REST_QUOTES = [
-  { text: 'Well done is better than well said.', author: 'Benjamin Franklin' },
-  { text: 'Action is eloquence.', author: 'William Shakespeare' },
-  { text: 'Nothing great was ever achieved without enthusiasm.', author: 'Ralph Waldo Emerson' },
-  { text: 'Let each man do his best.', author: 'William Shakespeare' },
-  { text: 'Heaven never helps the man who will not act.', author: 'Sophocles' },
-];
-
-const COOLDOWN_REFLECTIONS = [
-  { text: 'Let your breathing settle. Notice what felt difficult, what became easier, and one small thing you want to carry into the next session.', author: 'Pulse Coach' },
-  { text: 'The work is finished; the adaptation is beginning. Give your body time to slow down and acknowledge the effort you chose to make today.', author: 'Pulse Coach' },
-  { text: 'Release the tension you no longer need. Keep the confidence that comes from completing one more deliberate practice.', author: 'Pulse Coach' },
-];
 
 function formatTime(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds));
@@ -309,10 +302,16 @@ export default function Home() {
   const [finished, setFinished] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [runnerMessageSelection, setRunnerMessageSelection] = useState<{
+    phaseIndex: number;
+    kind: DisplayMessageKind;
+    message: DisplayMessage;
+  } | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const activeCoachRef = useRef<ActiveCoach | null>(null);
   const coachMemoryRef = useRef<CoachMemory>(createCoachMemory());
+  const displayMessageMemoryRef = useRef<DisplayMessageMemory>(createDisplayMessageMemory());
   const deadlineRef = useRef(0);
   const transitionLockRef = useRef(false);
   const lastTickSecondRef = useRef<number | null>(null);
@@ -332,6 +331,7 @@ export default function Home() {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
+      const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
       if (savedTimers) {
         const parsed = JSON.parse(savedTimers) as TimerConfig[];
         if (Array.isArray(parsed) && parsed.length > 0) storedTimers = parsed;
@@ -340,6 +340,9 @@ export default function Home() {
         if (Array.isArray(parsed)) storedTimers = migrateLegacyTimers(parsed);
       }
       if (savedSettings) storedSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
+      if (savedDisplayMessageMemory) {
+        displayMessageMemoryRef.current = createDisplayMessageMemory(JSON.parse(savedDisplayMessageMemory));
+      }
     } catch {
       // Keep safe defaults when device storage contains invalid data.
     }
@@ -460,7 +463,8 @@ export default function Home() {
 
   const announcePhase = useCallback((phase: WorkoutPhase, index: number) => {
     void playCue(phase.kind);
-    const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+    const personality = activeCoachRef.current?.personality
+      ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
     speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index)), { interrupt: true });
   }, [contextForPhase, playCue, settings.coachPersonality, speakCoach]);
 
@@ -469,9 +473,10 @@ export default function Home() {
     const liveVoices = availableVoices.length > 0
       ? availableVoices
       : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+    const personality = resolveCoachPersonality(settings.coachPersonality);
     const coach = resolveActiveCoach({
       voices: liveVoices,
-      personality: settings.coachPersonality,
+      personality,
       preference: settings.voicePreference,
       selectedVoiceURI: settings.voiceURI,
       previousAutomaticVoiceURI: settings.lastAutomaticVoiceURI,
@@ -518,6 +523,27 @@ export default function Home() {
     };
   }
 
+  const selectRunnerMessage = useCallback((phase: WorkoutPhase, index: number) => {
+    const kind: DisplayMessageKind | null = phase.kind === 'rest' || phase.kind === 'cycleRest'
+      ? 'motivation'
+      : phase.kind === 'cooldown'
+        ? 'aspiration'
+        : null;
+    if (!kind) {
+      setRunnerMessageSelection(null);
+      return;
+    }
+
+    const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current);
+    displayMessageMemoryRef.current = selection.memory;
+    try {
+      window.localStorage.setItem(DISPLAY_MESSAGE_MEMORY_STORAGE, JSON.stringify(selection.memory));
+    } catch {
+      // Message rotation still works when device storage is unavailable.
+    }
+    setRunnerMessageSelection({ phaseIndex: index, kind, message: selection.message });
+  }, []);
+
   const finishPhase = useCallback(() => {
     if (transitionLockRef.current) return;
     transitionLockRef.current = true;
@@ -528,7 +554,8 @@ export default function Home() {
       setFinished(true);
       setRemaining(0);
       void playCue('complete');
-      const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+      const personality = activeCoachRef.current?.personality
+        ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
       speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: true });
       releaseWakeLock();
       transitionLockRef.current = false;
@@ -540,9 +567,10 @@ export default function Home() {
     setRemaining(upcoming.duration);
     lastTickSecondRef.current = upcoming.duration;
     deadlineRef.current = Date.now() + upcoming.duration * 1000;
+    selectRunnerMessage(upcoming, nextIndex);
     announcePhase(upcoming, nextIndex);
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, sequence, settings.coachPersonality, speakCoach]);
+  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, speakCoach]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -556,12 +584,14 @@ export default function Home() {
         if (nextRemaining > 0 && settings.ticking) {
           void playTone(1180, 0.035, 0.34);
         }
-        if ((currentPhase.kind === 'work' || currentPhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
-          const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+        if ((currentPhase.kind === 'prepare' || currentPhase.kind === 'work' || currentPhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
+          const personality = activeCoachRef.current?.personality
+            ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoach(makeCountdownSpeech(personality, nextRemaining));
         }
         if (settings.voiceEnabled && currentPhase.kind === 'work') {
-          const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+          const personality = activeCoachRef.current?.personality
+            ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           const context = contextForPhase(currentPhase, phaseIndex, nextRemaining);
           const plan = planCoachIntervention(personality, context, coachMemoryRef.current);
           coachMemoryRef.current = plan.memory;
@@ -649,6 +679,7 @@ export default function Home() {
     const firstSequence = buildSequence(timer);
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
+    setRunnerMessageSelection(null);
     setActiveTimer(timer);
     setPhaseIndex(0);
     setRemaining(firstSequence[0]?.duration ?? 0);
@@ -663,6 +694,7 @@ export default function Home() {
     if (finished) {
       activeCoachRef.current = null;
       coachMemoryRef.current = createCoachMemory();
+      setRunnerMessageSelection(null);
       setPhaseIndex(0);
       setRemaining(sequence[0]?.duration ?? 0);
       lastTickSecondRef.current = sequence[0]?.duration ?? 0;
@@ -689,7 +721,9 @@ export default function Home() {
   const resetWorkout = () => {
     setRunning(false);
     setFinished(false);
+    activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
+    setRunnerMessageSelection(null);
     setPhaseIndex(0);
     setRemaining(sequence[0]?.duration ?? 0);
     lastTickSecondRef.current = sequence[0]?.duration ?? 0;
@@ -701,6 +735,7 @@ export default function Home() {
     setRunning(false);
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
+    setRunnerMessageSelection(null);
     window.speechSynthesis?.cancel();
     releaseWakeLock();
     try { screenOrientation().unlock?.(); } catch { /* no-op */ }
@@ -716,15 +751,16 @@ export default function Home() {
     const liveVoices = availableVoices.length > 0
       ? availableVoices
       : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+    const personality = resolveCoachPersonality(settings.coachPersonality);
     const preview = resolveActiveCoach({
       voices: liveVoices,
-      personality: settings.coachPersonality,
+      personality,
       preference: settings.voicePreference,
       selectedVoiceURI: settings.voiceURI,
       previousAutomaticVoiceURI: '',
       random: () => 0,
     });
-    speakCoach(makePreviewSpeech(settings.coachPersonality), { interrupt: true, voiceURI: preview.voiceURI });
+    speakCoach(makePreviewSpeech(personality), { interrupt: true, voiceURI: preview.voiceURI });
   };
 
   const totalRemaining = finished
@@ -735,11 +771,14 @@ export default function Home() {
     ? Math.min(1, Math.max(0, (currentPhase.duration - remaining) / currentPhase.duration))
     : finished ? 1 : 0;
 
-  const runnerMessage = currentPhase?.kind === 'rest' || currentPhase?.kind === 'cycleRest'
-    ? REST_QUOTES[(phaseIndex + currentPhase.round + currentPhase.cycle) % REST_QUOTES.length]
+  const currentMessageKind: DisplayMessageKind | null = currentPhase?.kind === 'rest' || currentPhase?.kind === 'cycleRest'
+    ? 'motivation'
     : currentPhase?.kind === 'cooldown'
-      ? COOLDOWN_REFLECTIONS[(activeTimer.rounds + activeTimer.cycles) % COOLDOWN_REFLECTIONS.length]
+      ? 'aspiration'
       : null;
+  const runnerMessage = runnerMessageSelection?.phaseIndex === phaseIndex && runnerMessageSelection.kind === currentMessageKind
+    ? runnerMessageSelection.message
+    : null;
 
   if (screen === 'editor') {
     return (
@@ -851,6 +890,15 @@ export default function Home() {
                     <small>{personality.description}</small>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`surprise-personality ${settings.coachPersonality === 'surprise' ? 'selected' : ''}`}
+                  aria-pressed={settings.coachPersonality === 'surprise'}
+                  onClick={() => setSettings((current) => ({ ...current, coachPersonality: 'surprise' }))}
+                >
+                  <strong>Surprise me</strong>
+                  <small>Picks a personality when the workout starts and keeps it throughout</small>
+                </button>
               </div>
             </fieldset>
             <fieldset className={`coach-choice-section compact ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
@@ -905,7 +953,7 @@ export default function Home() {
               </select>
             </label>
             <button className="setting-row setting-action" disabled={!settings.voiceEnabled} onClick={previewCoach}>
-              <div><strong>Test coach</strong><small>Preview this personality and voice</small></div>
+              <div><strong>Test coach</strong><small>Preview {settings.coachPersonality === 'surprise' ? 'a surprise personality' : 'this personality'} and voice</small></div>
               <span className="setting-value">Play <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <div className="setting-row unavailable">
@@ -927,7 +975,10 @@ export default function Home() {
 
           <footer className="version-card">
             <span className="brand-mark small">P</span>
-            <div><strong>Pulse</strong><small>Version {APP_VERSION} · Installable PWA</small></div>
+            <div>
+              <strong>Pulse</strong>
+              <small>Version {APP_VERSION} · Installable PWA · <a href="./third-party-notices.txt" target="_blank" rel="noreferrer">Content credits</a></small>
+            </div>
           </footer>
         </section>
       </main>

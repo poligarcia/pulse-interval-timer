@@ -20,7 +20,7 @@ The optional coach uses the system Speech Synthesis voices installed on the devi
 
 Automatic voice selection curates English system voices, avoids known novelty/effect voices, and applies a Female, Male or Surprise me preference where a known matching voice is available. A manually selected system voice always wins. Web Speech does not expose voice gender or quality metadata, so unknown voices remain available under **Other system voices** and device/browser voice availability can vary. External-music ducking remains unavailable because iOS web apps cannot control another app's volume.
 
-Motivational quotes and cooldown reflections are bundled with the app, so they also work offline without sending workout activity to a third-party service.
+Pulse bundles 120 curated motivational messages and 40 workout-specific cooldown reflections, so they work offline without sending workout activity to a third-party service. The motivational library is curated from the pinned, Apache-2.0-licensed Mentria Motivational Quotes dataset; source and license details ship in `public/third-party-notices.txt`.
 
 ## Development
 

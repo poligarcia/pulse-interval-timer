@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { ASPIRATIONAL_MESSAGES, MOTIVATIONAL_MESSAGES } from './display-message-data.ts';
+import { createDisplayMessageMemory, selectDisplayMessage } from './display-messages.ts';
+
+test('display messages use the supplied random source', () => {
+  const memory = createDisplayMessageMemory();
+  const first = selectDisplayMessage('motivation', memory, () => 0);
+  const last = selectDisplayMessage('motivation', memory, () => 0.999);
+
+  assert.notEqual(first.message.id, last.message.id);
+});
+
+test('display message libraries have the reviewed target sizes and unique content', () => {
+  assert.equal(MOTIVATIONAL_MESSAGES.length, 120);
+  assert.equal(ASPIRATIONAL_MESSAGES.length, 40);
+
+  const messages = [...MOTIVATIONAL_MESSAGES, ...ASPIRATIONAL_MESSAGES];
+  const normalizedTexts = messages.map(({ text }) => text.toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+  assert.equal(new Set(messages.map(({ id }) => id)).size, messages.length);
+  assert.equal(new Set(normalizedTexts).size, messages.length);
+  assert.ok(messages.every(({ text }) => text === text.trim() && text.length <= 180));
+  assert.ok(MOTIVATIONAL_MESSAGES.every(({ author }) => author === 'Mentria'));
+  assert.ok(ASPIRATIONAL_MESSAGES.every(({ author }) => author === 'Pulse Coach'));
+});
+
+test('motivational messages avoid the twenty most recently shown messages', () => {
+  let memory = createDisplayMessageMemory();
+  const selectedIds: string[] = [];
+
+  for (let index = 0; index < 21; index += 1) {
+    const selection = selectDisplayMessage('motivation', memory, () => 0);
+    selectedIds.push(selection.message.id);
+    memory = selection.memory;
+  }
+
+  assert.equal(new Set(selectedIds).size, 21);
+  assert.deepEqual(memory.motivation, selectedIds.slice(-20));
+});
+
+test('aspirational messages avoid the twelve most recently shown messages', () => {
+  let memory = createDisplayMessageMemory();
+  const selectedIds: string[] = [];
+
+  for (let index = 0; index < 13; index += 1) {
+    const selection = selectDisplayMessage('aspiration', memory, () => 0);
+    selectedIds.push(selection.message.id);
+    memory = selection.memory;
+  }
+
+  assert.equal(new Set(selectedIds).size, 13);
+  assert.deepEqual(memory.aspiration, selectedIds.slice(-12));
+});
+
+test('stored message memory ignores unknown and malformed entries', () => {
+  const restored = createDisplayMessageMemory({
+    motivation: ['unknown', 42, 'motivation-002'],
+    aspiration: 'aspiration-003',
+  });
+
+  assert.deepEqual(restored, {
+    motivation: ['motivation-002'],
+    aspiration: [],
+  });
+});

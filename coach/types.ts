@@ -1,6 +1,7 @@
 export type PhaseKind = 'prepare' | 'work' | 'rest' | 'cycleRest' | 'cooldown';
 
 export type CoachPersonalityId = 'focused' | 'energetic' | 'tough' | 'calm';
+export type CoachPersonalityPreference = CoachPersonalityId | 'surprise';
 export type VoicePreference = 'female' | 'male' | 'either';
 export type VoiceGender = Exclude<VoicePreference, 'either'>;
 export type CoachIntent = 'neutral' | 'encourage' | 'challenge' | 'acknowledge';
