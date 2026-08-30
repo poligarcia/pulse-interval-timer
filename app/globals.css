@@ -12,6 +12,7 @@
   --yellow: #fff43d;
   --muted: #9da29f;
   --dark-muted: #606563;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -473,7 +474,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .runner-main { display: grid; grid-template-rows: auto auto 1fr auto auto; justify-items: center; align-items: center; padding: 26px 18px 17px; }
 .phase-kicker { margin: 0; padding: 6px 10px; border: 1px solid rgb(18 20 22 / 24%); border-radius: 99px; font-size: 10px; font-weight: 1000; letter-spacing: .15em; }
 .runner-main h1 { margin: 11px 0 0; font-size: clamp(52px, 15vw, 90px); font-weight: 1000; letter-spacing: -.08em; line-height: .9; text-transform: uppercase; }
-.giant-time { align-self: center; font-variant-numeric: tabular-nums; font-size: clamp(105px, 31vw, 225px); font-weight: 1000; letter-spacing: -.105em; line-height: .82; }
+.giant-time { align-self: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(105px, 31vw, 225px); font-weight: 900; letter-spacing: -.09em; line-height: .82; }
 .runner-message { width: min(570px, 100%); margin: 9px 0 18px; padding: 15px 18px; border: 1px solid rgb(18 20 22 / 20%); border-radius: 17px; background: rgb(255 255 255 / 18%); text-align: center; }
 .runner-message blockquote { margin: 0; font-size: clamp(15px, 4vw, 20px); font-weight: 850; line-height: 1.22; letter-spacing: -.025em; }
 .runner-message figcaption { margin-top: 7px; font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }

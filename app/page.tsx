@@ -72,6 +72,7 @@ const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
 const DISPLAY_MESSAGE_MEMORY_STORAGE = 'pulse-display-message-memory-v1';
+const RECENT_TIMERS_STORAGE = 'pulse-recent-timers-v1';
 const HOME_TIMER_LIMIT = 4;
 const RECOVERY_SPEECH_PAUSE_MS = 400;
 
@@ -171,6 +172,28 @@ function workoutDuration(timer: TimerConfig) {
   const roundRests = timer.rest * Math.max(0, timer.rounds - 1) * timer.cycles;
   const cycleRests = timer.cycleRest * Math.max(0, timer.cycles - 1);
   return timer.prepare + work + roundRests + cycleRests + timer.cooldown;
+}
+
+function selectHomeTimers(timers: TimerConfig[], recentTimerIds: string[]) {
+  const timersById = new Map(timers.map((timer) => [timer.id, timer]));
+  const selectedIds = new Set<string>();
+  const selectedTimers: TimerConfig[] = [];
+
+  for (const id of recentTimerIds) {
+    const timer = timersById.get(id);
+    if (!timer || selectedIds.has(id)) continue;
+    selectedIds.add(id);
+    selectedTimers.push(timer);
+  }
+
+  for (const timer of timers) {
+    if (selectedTimers.length >= HOME_TIMER_LIMIT) break;
+    if (selectedIds.has(timer.id)) continue;
+    selectedIds.add(timer.id);
+    selectedTimers.push(timer);
+  }
+
+  return selectedTimers.slice(0, HOME_TIMER_LIMIT);
 }
 
 function buildSequence(timer: TimerConfig): WorkoutPhase[] {
@@ -302,6 +325,7 @@ export default function Home() {
   const [screen, setScreen] = useState<ScreenName>('home');
   const [returnScreen, setReturnScreen] = useState<ReturnScreen>('home');
   const [timers, setTimers] = useState<TimerConfig[]>(DEFAULT_TIMERS);
+  const [recentTimerIds, setRecentTimerIds] = useState<string[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [draft, setDraft] = useState<TimerConfig>(makeEmptyTimer());
   const [activeTimer, setActiveTimer] = useState<TimerConfig>(DEFAULT_TIMERS[0]);
@@ -338,10 +362,12 @@ export default function Home() {
 
   useEffect(() => {
     let storedTimers: TimerConfig[] | null = null;
+    let storedRecentTimerIds: string[] | null = null;
     let storedSettings: Settings | null = null;
     try {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
+      const savedRecentTimerIds = window.localStorage.getItem(RECENT_TIMERS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
       const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
       if (savedTimers) {
@@ -350,6 +376,12 @@ export default function Home() {
       } else if (legacyTimers) {
         const parsed = JSON.parse(legacyTimers) as TimerConfig[];
         if (Array.isArray(parsed)) storedTimers = migrateLegacyTimers(parsed);
+      }
+      if (savedRecentTimerIds) {
+        const parsed = JSON.parse(savedRecentTimerIds) as unknown;
+        if (Array.isArray(parsed)) {
+          storedRecentTimerIds = parsed.filter((id): id is string => typeof id === 'string');
+        }
       }
       if (savedSettings) storedSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
       if (savedDisplayMessageMemory) {
@@ -361,6 +393,7 @@ export default function Home() {
 
     window.queueMicrotask(() => {
       if (storedTimers) setTimers(storedTimers);
+      if (storedRecentTimerIds) setRecentTimerIds(storedRecentTimerIds);
       if (storedSettings) setSettings(storedSettings);
       setHydrated(true);
     });
@@ -374,6 +407,11 @@ export default function Home() {
     if (!hydrated) return;
     window.localStorage.setItem(TIMERS_STORAGE, JSON.stringify(timers));
   }, [timers, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(RECENT_TIMERS_STORAGE, JSON.stringify(recentTimerIds));
+  }, [recentTimerIds, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -733,6 +771,7 @@ export default function Home() {
   const deleteTimer = () => {
     if (!draft.id) return;
     setTimers((current) => current.filter((timer) => timer.id !== draft.id));
+    setRecentTimerIds((current) => current.filter((id) => id !== draft.id));
     setScreen('library');
   };
 
@@ -749,6 +788,7 @@ export default function Home() {
 
   const beginWorkout = (timer: TimerConfig) => {
     const firstSequence = buildSequence(timer);
+    setRecentTimerIds((current) => [timer.id, ...current.filter((id) => id !== timer.id)].slice(0, HOME_TIMER_LIMIT));
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
@@ -1127,7 +1167,7 @@ export default function Home() {
         </header>
 
         <section className="library-content">
-          <div className="library-intro"><div><p className="eyebrow">ALL PROGRAMS</p><h1>{timers.length} timers</h1></div><p>Run, edit, or move a timer. The first four become your Home shortcuts.</p></div>
+          <div className="library-intro"><div><p className="eyebrow">ALL PROGRAMS</p><h1>{timers.length} timers</h1></div><p>Run, edit, or move a timer. Home keeps your four most recently used timers close.</p></div>
           <div className="library-list">
             {timers.map((timer, index) => (
               <article className="library-card" key={timer.id}>
@@ -1154,7 +1194,7 @@ export default function Home() {
     );
   }
 
-  const homeTimers = timers.slice(0, HOME_TIMER_LIMIT);
+  const homeTimers = selectHomeTimers(timers, recentTimerIds);
   return (
     <main className="app-shell home-screen">
       <header className="topbar">
@@ -1173,7 +1213,7 @@ export default function Home() {
 
       <section className="workouts" aria-labelledby="workouts-title">
         <div className="section-heading">
-          <div><p className="eyebrow">QUICK START</p><h2 id="workouts-title">My timers</h2></div>
+          <div><p className="eyebrow">QUICK START</p><h2 id="workouts-title">Recent timers</h2></div>
           <button className="manage-link" onClick={() => setScreen('library')}>Manage {timers.length} →</button>
         </div>
 
