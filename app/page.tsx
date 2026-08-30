@@ -2,6 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import {
+  COACH_PERSONALITIES,
+  createCoachMemory,
+  curateVoices,
+  deriveCoachContext,
+  makeCountdownSpeech,
+  makePreviewSpeech,
+  planCoachIntervention,
+  resolveActiveCoach,
+  selectPhaseSpeech,
+} from '@/coach';
+import type {
+  ActiveCoach,
+  CoachMemory,
+  CoachPersonalityId,
+  CoachSpeech,
+  PhaseKind,
+  VoicePreference,
+} from '@/coach';
 
 type TimerConfig = {
   id: string;
@@ -22,11 +41,12 @@ type Settings = {
   ticking: boolean;
   voiceEnabled: boolean;
   voiceURI: string;
+  coachPersonality: CoachPersonalityId;
+  voicePreference: VoicePreference;
+  lastAutomaticVoiceURI: string;
   ducking: boolean;
   rotation: boolean;
 };
-
-type PhaseKind = 'prepare' | 'work' | 'rest' | 'cycleRest' | 'cooldown';
 
 type WorkoutPhase = {
   kind: PhaseKind;
@@ -39,7 +59,7 @@ type WorkoutPhase = {
 type ScreenName = 'home' | 'library' | 'editor' | 'runner' | 'settings';
 type ReturnScreen = 'home' | 'library';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
@@ -86,6 +106,9 @@ const DEFAULT_SETTINGS: Settings = {
   ticking: false,
   voiceEnabled: false,
   voiceURI: '',
+  coachPersonality: 'focused',
+  voicePreference: 'either',
+  lastAutomaticVoiceURI: '',
   ducking: false,
   rotation: true,
 };
@@ -107,12 +130,12 @@ function makeEmptyTimer(): TimerConfig {
   return timer;
 }
 
-const PHASE_META: Record<PhaseKind, { label: string; short: string; spoken: string }> = {
-  prepare: { label: 'Prepare', short: 'Get ready', spoken: 'Prepare' },
-  work: { label: 'Work', short: 'Push', spoken: 'Work' },
-  rest: { label: 'Rest', short: 'Recover', spoken: 'Rest' },
-  cycleRest: { label: 'Cycle rest', short: 'Reset', spoken: 'Cycle rest' },
-  cooldown: { label: 'Cooldown', short: 'Breathe', spoken: 'Cool down' },
+const PHASE_META: Record<PhaseKind, { label: string; short: string }> = {
+  prepare: { label: 'Prepare', short: 'Get ready' },
+  work: { label: 'Work', short: 'Push' },
+  rest: { label: 'Rest', short: 'Recover' },
+  cycleRest: { label: 'Cycle rest', short: 'Reset' },
+  cooldown: { label: 'Cooldown', short: 'Breathe' },
 };
 
 const REST_QUOTES = [
@@ -288,6 +311,8 @@ export default function Home() {
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   const audioContextRef = useRef<AudioContext | null>(null);
+  const activeCoachRef = useRef<ActiveCoach | null>(null);
+  const coachMemoryRef = useRef<CoachMemory>(createCoachMemory());
   const deadlineRef = useRef(0);
   const transitionLockRef = useRef(false);
   const lastTickSecondRef = useRef<number | null>(null);
@@ -296,6 +321,9 @@ export default function Home() {
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
   const currentPhase = sequence[phaseIndex];
   const nextPhase = sequence[phaseIndex + 1];
+  const curatedVoices = useMemo(() => curateVoices(availableVoices), [availableVoices]);
+  const recommendedVoices = curatedVoices.filter(({ profile }) => profile.recommended && !profile.novelty);
+  const otherVoices = curatedVoices.filter(({ profile }) => !profile.recommended || profile.novelty);
 
   useEffect(() => {
     let storedTimers: TimerConfig[] | null = null;
@@ -404,23 +432,56 @@ export default function Home() {
     return played;
   }, [playTone]);
 
-  const speak = useCallback((text: string, interrupt = false) => {
+  const speakCoach = useCallback((speech: CoachSpeech, options?: { interrupt?: boolean; voiceURI?: string }) => {
     if (!settings.voiceEnabled || !('speechSynthesis' in window)) return;
-    if (interrupt) window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const selectedVoice = availableVoices.find((voice) => voice.voiceURI === settings.voiceURI);
+    if (options?.interrupt) window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(speech.text);
+    const voiceURI = options?.voiceURI ?? activeCoachRef.current?.voiceURI ?? '';
+    const liveVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    const selectedVoice = liveVoices.find((voice) => voice.voiceURI === voiceURI);
     if (selectedVoice) utterance.voice = selectedVoice;
     utterance.lang = selectedVoice?.lang ?? 'en-US';
-    utterance.rate = 1.02;
-    utterance.pitch = 1;
+    utterance.rate = speech.rate;
+    utterance.pitch = speech.pitch;
     utterance.volume = settings.volume;
     window.speechSynthesis.speak(utterance);
-  }, [availableVoices, settings.voiceEnabled, settings.voiceURI, settings.volume]);
+  }, [availableVoices, settings.voiceEnabled, settings.volume]);
 
-  const announcePhase = useCallback((phase: WorkoutPhase) => {
+  const contextForPhase = useCallback((phase: WorkoutPhase, index: number, phaseRemaining = phase.duration) => (
+    deriveCoachContext({
+      phase,
+      phaseIndex: index,
+      sequence,
+      remainingInPhase: phaseRemaining,
+      totalRounds: activeTimer.rounds,
+      totalCycles: activeTimer.cycles,
+    })
+  ), [activeTimer.cycles, activeTimer.rounds, sequence]);
+
+  const announcePhase = useCallback((phase: WorkoutPhase, index: number) => {
     void playCue(phase.kind);
-    speak(PHASE_META[phase.kind].spoken, true);
-  }, [playCue, speak]);
+    const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+    speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index)), { interrupt: true });
+  }, [contextForPhase, playCue, settings.coachPersonality, speakCoach]);
+
+  const resolveWorkoutCoach = useCallback(() => {
+    if (activeCoachRef.current) return activeCoachRef.current;
+    const liveVoices = availableVoices.length > 0
+      ? availableVoices
+      : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+    const coach = resolveActiveCoach({
+      voices: liveVoices,
+      personality: settings.coachPersonality,
+      preference: settings.voicePreference,
+      selectedVoiceURI: settings.voiceURI,
+      previousAutomaticVoiceURI: settings.lastAutomaticVoiceURI,
+    });
+    activeCoachRef.current = coach;
+    if (!settings.voiceURI && coach.voiceURI && coach.voiceURI !== settings.lastAutomaticVoiceURI) {
+      setSettings((current) => ({ ...current, lastAutomaticVoiceURI: coach.voiceURI }));
+    }
+    return coach;
+  }, [availableVoices, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
@@ -467,7 +528,8 @@ export default function Home() {
       setFinished(true);
       setRemaining(0);
       void playCue('complete');
-      speak('Workout complete', true);
+      const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+      speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: true });
       releaseWakeLock();
       transitionLockRef.current = false;
       return;
@@ -478,9 +540,9 @@ export default function Home() {
     setRemaining(upcoming.duration);
     lastTickSecondRef.current = upcoming.duration;
     deadlineRef.current = Date.now() + upcoming.duration * 1000;
-    announcePhase(upcoming);
+    announcePhase(upcoming, nextIndex);
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, sequence, speak]);
+  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, sequence, settings.coachPersonality, speakCoach]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -495,7 +557,15 @@ export default function Home() {
           void playTone(1180, 0.035, 0.34);
         }
         if ((currentPhase.kind === 'work' || currentPhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
-          speak(String(nextRemaining));
+          const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+          speakCoach(makeCountdownSpeech(personality, nextRemaining));
+        }
+        if (settings.voiceEnabled && currentPhase.kind === 'work') {
+          const personality = activeCoachRef.current?.personality ?? settings.coachPersonality;
+          const context = contextForPhase(currentPhase, phaseIndex, nextRemaining);
+          const plan = planCoachIntervention(personality, context, coachMemoryRef.current);
+          coachMemoryRef.current = plan.memory;
+          if (plan.speech) speakCoach(plan.speech);
         }
       }
 
@@ -503,7 +573,7 @@ export default function Home() {
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [currentPhase, finishPhase, playTone, running, settings.ticking, speak]);
+  }, [contextForPhase, currentPhase, finishPhase, phaseIndex, playTone, running, settings.coachPersonality, settings.ticking, settings.voiceEnabled, speakCoach]);
 
   useEffect(() => () => {
     releaseWakeLock();
@@ -577,6 +647,8 @@ export default function Home() {
 
   const beginWorkout = (timer: TimerConfig) => {
     const firstSequence = buildSequence(timer);
+    activeCoachRef.current = null;
+    coachMemoryRef.current = createCoachMemory();
     setActiveTimer(timer);
     setPhaseIndex(0);
     setRemaining(firstSequence[0]?.duration ?? 0);
@@ -589,6 +661,8 @@ export default function Home() {
 
   const toggleWorkout = async () => {
     if (finished) {
+      activeCoachRef.current = null;
+      coachMemoryRef.current = createCoachMemory();
       setPhaseIndex(0);
       setRemaining(sequence[0]?.duration ?? 0);
       lastTickSecondRef.current = sequence[0]?.duration ?? 0;
@@ -603,10 +677,11 @@ export default function Home() {
       releaseWakeLock();
     } else {
       await ensureAudio();
+      resolveWorkoutCoach();
       deadlineRef.current = Date.now() + remaining * 1000;
       lastTickSecondRef.current = remaining;
       setRunning(true);
-      if (currentPhase) announcePhase(currentPhase);
+      if (currentPhase) announcePhase(currentPhase, phaseIndex);
       void requestWakeLock();
     }
   };
@@ -614,6 +689,7 @@ export default function Home() {
   const resetWorkout = () => {
     setRunning(false);
     setFinished(false);
+    coachMemoryRef.current = createCoachMemory();
     setPhaseIndex(0);
     setRemaining(sequence[0]?.duration ?? 0);
     lastTickSecondRef.current = sequence[0]?.duration ?? 0;
@@ -623,6 +699,8 @@ export default function Home() {
 
   const leaveWorkout = () => {
     setRunning(false);
+    activeCoachRef.current = null;
+    coachMemoryRef.current = createCoachMemory();
     window.speechSynthesis?.cancel();
     releaseWakeLock();
     try { screenOrientation().unlock?.(); } catch { /* no-op */ }
@@ -632,6 +710,21 @@ export default function Home() {
   const openSettings = (origin: ReturnScreen) => {
     setReturnScreen(origin);
     setScreen('settings');
+  };
+
+  const previewCoach = () => {
+    const liveVoices = availableVoices.length > 0
+      ? availableVoices
+      : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+    const preview = resolveActiveCoach({
+      voices: liveVoices,
+      personality: settings.coachPersonality,
+      preference: settings.voicePreference,
+      selectedVoiceURI: settings.voiceURI,
+      previousAutomaticVoiceURI: '',
+      random: () => 0,
+    });
+    speakCoach(makePreviewSpeech(settings.coachPersonality), { interrupt: true, voiceURI: preview.voiceURI });
   };
 
   const totalRemaining = finished
@@ -739,30 +832,88 @@ export default function Home() {
           <div className="settings-group">
             <p className="settings-kicker">COACH VOICE</p>
             <div className="setting-row">
-              <div><strong>Voice coach</strong><small>Phase names and a spoken 3–2–1</small></div>
+              <div><strong>Voice coach</strong><small>Phase cues, countdowns, and occasional coaching</small></div>
               <Switch label="Voice coach" checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
             </div>
+            <fieldset className={`coach-choice-section ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
+              <legend>Coach personality</legend>
+              <p>Sets the coach&apos;s wording and delivery for the workout.</p>
+              <div className="personality-grid">
+                {Object.values(COACH_PERSONALITIES).map((personality) => (
+                  <button
+                    type="button"
+                    className={settings.coachPersonality === personality.id ? 'selected' : ''}
+                    aria-pressed={settings.coachPersonality === personality.id}
+                    key={personality.id}
+                    onClick={() => setSettings((current) => ({ ...current, coachPersonality: personality.id }))}
+                  >
+                    <strong>{personality.label}</strong>
+                    <small>{personality.description}</small>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className={`coach-choice-section compact ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
+              <legend>Voice preference</legend>
+              <p>Used only when System voice is Automatic.</p>
+              <div className="preference-grid">
+                {([
+                  ['female', 'Female'],
+                  ['male', 'Male'],
+                  ['either', 'Surprise me'],
+                ] as Array<[VoicePreference, string]>).map(([preference, label]) => (
+                  <button
+                    type="button"
+                    className={settings.voicePreference === preference ? 'selected' : ''}
+                    aria-pressed={settings.voicePreference === preference}
+                    key={preference}
+                    onClick={() => setSettings((current) => ({ ...current, voicePreference: preference }))}
+                  >{label}</button>
+                ))}
+              </div>
+            </fieldset>
             <label className={`voice-select-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
-              <span><strong>System voice</strong><small>Available voices depend on this device</small></span>
+              <span><strong>System voice</strong><small>A specific voice overrides the preference above</small></span>
               <select
                 aria-label="Coach voice"
                 value={settings.voiceURI}
                 disabled={!settings.voiceEnabled}
                 onChange={(event) => setSettings((current) => ({ ...current, voiceURI: event.target.value }))}
               >
-                <option value="">Device default</option>
-                {availableVoices.map((voice) => <option value={voice.voiceURI} key={voice.voiceURI}>{voice.name} · {voice.lang}</option>)}
+                <option value="">Automatic</option>
+                {settings.voiceURI && !curatedVoices.some(({ voice }) => voice.voiceURI === settings.voiceURI) && (
+                  <option value={settings.voiceURI}>Saved voice · unavailable on this device</option>
+                )}
+                {recommendedVoices.length > 0 && (
+                  <optgroup label="Recommended">
+                    {recommendedVoices.map(({ voice, profile }) => (
+                      <option value={voice.voiceURI} key={voice.voiceURI}>
+                        {voice.name} · {profile.gender ?? 'either'}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {otherVoices.length > 0 && (
+                  <optgroup label="Other system voices">
+                    {otherVoices.map(({ voice, profile }) => (
+                      <option value={voice.voiceURI} key={voice.voiceURI}>
+                        {voice.name} · {voice.lang}{profile.novelty ? ' · effect' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </label>
-            <button className="setting-row setting-action" disabled={!settings.voiceEnabled} onClick={() => speak('Ready. Three, two, one. Work.', true)}>
-              <div><strong>Test coach</strong><small>Preview the selected voice</small></div>
+            <button className="setting-row setting-action" disabled={!settings.voiceEnabled} onClick={previewCoach}>
+              <div><strong>Test coach</strong><small>Preview this personality and voice</small></div>
               <span className="setting-value">Play <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <div className="setting-row unavailable">
               <div><strong>Ducking</strong><small>Reduce other music during cues</small></div>
               <Switch label="Ducking unavailable" checked={settings.ducking} onChange={() => undefined} disabled />
             </div>
-            <p className="setting-note">Web apps on iOS cannot change the volume of Spotify, Apple Music or another app. Pulse can only control its own sounds.</p>
+            <p className="setting-note">Pulse uses this device&apos;s English system voices. Automatic avoids known effect voices and keeps one concrete voice for the entire workout.</p>
+            <p className="setting-note secondary">Web apps on iOS cannot change the volume of Spotify, Apple Music or another app. Pulse can only control its own sounds.</p>
           </div>
 
           <div className="settings-group">
