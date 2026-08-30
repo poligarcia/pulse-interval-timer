@@ -77,7 +77,7 @@ export function makeDisplayMessageSpeech(
     personalityId,
     `display-${message.id}`,
     message.text,
-    'contextual',
+    'message',
     kind === 'motivation' ? 'encourage' : 'acknowledge',
   );
 }

@@ -6,7 +6,7 @@ export type VoicePreference = 'female' | 'male' | 'either';
 export type VoiceGender = Exclude<VoicePreference, 'either'>;
 export type CoachIntent = 'neutral' | 'encourage' | 'challenge' | 'acknowledge';
 export type FatigueZone = 'fresh' | 'settled' | 'challenging' | 'finishing';
-export type SpeechDelivery = 'phase' | 'countdown' | 'contextual' | 'preview';
+export type SpeechDelivery = 'phase' | 'countdown' | 'contextual' | 'message' | 'preview';
 
 export type CoachPhase = {
   kind: PhaseKind;

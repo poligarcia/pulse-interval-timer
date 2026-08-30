@@ -1,5 +1,9 @@
 # Repository Instructions
 
+## Deployment
+
+Publish Pulse through the existing GitHub Pages workflow only. Do not create, update, or deploy a ChatGPT Sites version of this project.
+
 ## Public-repository safety
 
 Treat this repository as public. Every tracked file, commit message, author and committer field, workflow log, generated asset, and reachable Git object may become visible outside the project.

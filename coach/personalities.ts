@@ -171,7 +171,15 @@ export function getSpeechTuning(
   pitchOffset = 0,
 ) {
   const personality = COACH_PERSONALITIES[personalityId];
-  const deliveryRate = delivery === 'countdown' ? 0.08 : delivery === 'phase' ? 0.025 : 0;
+  const deliveryRate = delivery === 'countdown'
+    ? 0.08
+    : delivery === 'phase'
+      ? 0.025
+      : delivery === 'message'
+        ? -0.08
+        : delivery === 'contextual'
+          ? -0.055
+          : -0.04;
   const intentRate = intent === 'challenge' ? 0.035 : intent === 'encourage' ? 0.015 : intent === 'acknowledge' ? -0.015 : 0;
   const intentPitch = intent === 'challenge' ? (personalityId === 'tough' ? -0.01 : 0.01) : 0;
   return {

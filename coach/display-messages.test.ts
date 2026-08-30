@@ -20,9 +20,11 @@ test('display messages become coach speech with phase-appropriate delivery', () 
   assert.equal(motivationalSpeech.id, `display-${motivation.id}`);
   assert.equal(motivationalSpeech.text, motivation.text);
   assert.equal(motivationalSpeech.intent, 'encourage');
+  assert.ok(motivationalSpeech.rate < 1.1);
   assert.equal(aspirationalSpeech.id, `display-${aspiration.id}`);
   assert.equal(aspirationalSpeech.text, aspiration.text);
   assert.equal(aspirationalSpeech.intent, 'acknowledge');
+  assert.ok(aspirationalSpeech.rate < 0.9);
 });
 
 test('display message libraries have the reviewed target sizes and unique content', () => {

@@ -47,6 +47,7 @@ type Settings = {
   volume: number;
   ticking: boolean;
   voiceEnabled: boolean;
+  coachPhrasesEnabled: boolean;
   voiceURI: string;
   coachPersonality: CoachPersonalityPreference;
   voicePreference: VoicePreference;
@@ -66,7 +67,7 @@ type WorkoutPhase = {
 type ScreenName = 'home' | 'library' | 'editor' | 'runner' | 'settings';
 type ReturnScreen = 'home' | 'library';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
@@ -113,6 +114,7 @@ const DEFAULT_SETTINGS: Settings = {
   volume: 0.65,
   ticking: false,
   voiceEnabled: false,
+  coachPhrasesEnabled: true,
   voiceURI: '',
   coachPersonality: 'focused',
   voicePreference: 'either',
@@ -559,7 +561,7 @@ export default function Home() {
       void playCue('complete');
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-      const finishingFromCooldown = sequence[phaseIndex]?.kind === 'cooldown';
+      const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[phaseIndex]?.kind === 'cooldown';
       speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: !finishingFromCooldown });
       releaseWakeLock();
       transitionLockRef.current = false;
@@ -573,13 +575,13 @@ export default function Home() {
     deadlineRef.current = Date.now() + upcoming.duration * 1000;
     const messageSelection = selectRunnerMessage(upcoming, nextIndex);
     announcePhase(upcoming, nextIndex);
-    if (messageSelection) {
+    if (settings.coachPhrasesEnabled && messageSelection) {
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
       speakCoach(makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message));
     }
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, speakCoach]);
+  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -598,7 +600,7 @@ export default function Home() {
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoach(makeCountdownSpeech(personality, nextRemaining));
         }
-        if (settings.voiceEnabled && currentPhase.kind === 'work') {
+        if (settings.voiceEnabled && settings.coachPhrasesEnabled && currentPhase.kind === 'work') {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           const context = contextForPhase(currentPhase, phaseIndex, nextRemaining);
@@ -612,7 +614,7 @@ export default function Home() {
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [contextForPhase, currentPhase, finishPhase, phaseIndex, playTone, running, settings.coachPersonality, settings.ticking, settings.voiceEnabled, speakCoach]);
+  }, [contextForPhase, currentPhase, finishPhase, phaseIndex, playTone, running, settings.coachPersonality, settings.coachPhrasesEnabled, settings.ticking, settings.voiceEnabled, speakCoach]);
 
   useEffect(() => () => {
     releaseWakeLock();
@@ -724,7 +726,7 @@ export default function Home() {
       setRunning(true);
       if (currentPhase) {
         announcePhase(currentPhase, phaseIndex);
-        if (runnerMessageSelection?.phaseIndex === phaseIndex) {
+        if (settings.coachPhrasesEnabled && runnerMessageSelection?.phaseIndex === phaseIndex) {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoach(makeDisplayMessageSpeech(personality, runnerMessageSelection.kind, runnerMessageSelection.message));
@@ -887,8 +889,17 @@ export default function Home() {
           <div className="settings-group">
             <p className="settings-kicker">COACH VOICE</p>
             <div className="setting-row">
-              <div><strong>Voice coach</strong><small>Phase cues, countdowns, and occasional coaching</small></div>
+              <div><strong>Voice coach</strong><small>Phase cues and a spoken 3–2–1</small></div>
               <Switch label="Voice coach" checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
+            </div>
+            <div className={`setting-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
+              <div><strong>Coaching phrases</strong><small>Read motivational, recovery, and contextual guidance</small></div>
+              <Switch
+                label="Read coaching phrases"
+                checked={settings.coachPhrasesEnabled}
+                disabled={!settings.voiceEnabled}
+                onChange={(coachPhrasesEnabled) => setSettings((current) => ({ ...current, coachPhrasesEnabled }))}
+              />
             </div>
             <fieldset className={`coach-choice-section ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
               <legend>Coach personality</legend>
