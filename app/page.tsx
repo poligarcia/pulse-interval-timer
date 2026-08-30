@@ -42,7 +42,7 @@ import {
   DEFAULT_REMINDER_DAYS,
   DEFAULT_REMINDER_TIME,
   REMINDER_DAY_OPTIONS,
-  createWorkoutReminderCalendar,
+  createWorkoutReminderCalendarDataUrl,
   normalizeReminderDays,
   normalizeReminderTime,
 } from '@/reminders';
@@ -73,7 +73,7 @@ type Settings = {
   lastAutomaticVoiceURI: string;
   ducking: boolean;
   rotation: boolean;
-  weeklyWorkoutGoal: number;
+  weeklyActiveDayGoal: number;
   reminderDays: ReminderDay[];
   reminderTime: string;
 };
@@ -151,22 +151,23 @@ const DEFAULT_SETTINGS: Settings = {
   lastAutomaticVoiceURI: '',
   ducking: false,
   rotation: true,
-  weeklyWorkoutGoal: 3,
+  weeklyActiveDayGoal: 3,
   reminderDays: DEFAULT_REMINDER_DAYS,
   reminderTime: DEFAULT_REMINDER_TIME,
 };
 
 function normalizeSettings(value: unknown): Settings {
   const stored = value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Partial<Settings>
+    ? value as Partial<Settings> & { weeklyWorkoutGoal?: unknown }
     : {};
-  const requestedGoal = Number(stored.weeklyWorkoutGoal);
+  const { weeklyWorkoutGoal: legacyWeeklyWorkoutGoal, ...currentSettings } = stored;
+  const requestedGoal = Number(currentSettings.weeklyActiveDayGoal ?? legacyWeeklyWorkoutGoal);
   return {
     ...DEFAULT_SETTINGS,
-    ...stored,
-    weeklyWorkoutGoal: Number.isFinite(requestedGoal)
+    ...currentSettings,
+    weeklyActiveDayGoal: Number.isFinite(requestedGoal)
       ? Math.min(7, Math.max(1, Math.round(requestedGoal)))
-      : DEFAULT_SETTINGS.weeklyWorkoutGoal,
+      : DEFAULT_SETTINGS.weeklyActiveDayGoal,
     reminderDays: normalizeReminderDays(stored.reminderDays),
     reminderTime: normalizeReminderTime(stored.reminderTime),
   };
@@ -724,16 +725,16 @@ export default function Home() {
     const session = createWorkoutSession(activeTimer, startedAt, completedAt);
     recordedWorkoutSessionIdRef.current = session.id;
     const previouslyUnlocked = new Set(
-      calculateProgressMilestones(workoutSessions, completedAt, settings.weeklyWorkoutGoal)
+      calculateProgressMilestones(workoutSessions, completedAt, settings.weeklyActiveDayGoal)
         .filter(({ unlocked }) => unlocked)
         .map(({ id }) => id),
     );
     const nextSessions = [session, ...workoutSessions];
-    const newlyUnlocked = calculateProgressMilestones(nextSessions, completedAt, settings.weeklyWorkoutGoal)
+    const newlyUnlocked = calculateProgressMilestones(nextSessions, completedAt, settings.weeklyActiveDayGoal)
       .filter(({ id, unlocked }) => unlocked && !previouslyUnlocked.has(id));
     setWorkoutSessions(nextSessions);
     setNewMilestones(newlyUnlocked);
-  }, [activeTimer, settings.weeklyWorkoutGoal, workoutSessions]);
+  }, [activeTimer, settings.weeklyActiveDayGoal, workoutSessions]);
 
   const finishPhase = useCallback(() => {
     if (transitionLockRef.current) return;
@@ -973,10 +974,10 @@ export default function Home() {
     setScreen('settings');
   };
 
-  const changeWeeklyGoal = (offset: -1 | 1) => {
+  const changeWeeklyActiveDayGoal = (offset: -1 | 1) => {
     setSettings((current) => ({
       ...current,
-      weeklyWorkoutGoal: Math.min(7, Math.max(1, current.weeklyWorkoutGoal + offset)),
+      weeklyActiveDayGoal: Math.min(7, Math.max(1, current.weeklyActiveDayGoal + offset)),
     }));
   };
 
@@ -992,33 +993,22 @@ export default function Home() {
     });
   };
 
-  const addCalendarReminders = async () => {
-    const calendar = createWorkoutReminderCalendar(settings.reminderDays, settings.reminderTime);
-    const file = new File([calendar], 'pulse-workout-reminders.ics', { type: 'text/calendar;charset=utf-8' });
+  const addCalendarReminders = () => {
     setCalendarStatus('');
 
     try {
-      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Pulse workout reminders',
-          text: 'Add these recurring Pulse workouts to your calendar.',
-        });
-        setCalendarStatus('Reminder shared. Add the recurring event to your calendar to finish.');
-        return;
-      }
-
-      const url = URL.createObjectURL(file);
+      const url = createWorkoutReminderCalendarDataUrl(settings.reminderDays, settings.reminderTime);
       const link = document.createElement('a');
       link.href = url;
-      link.download = file.name;
-      document.documentElement.appendChild(link);
+      link.download = 'pulse-workout-reminders.ics';
+      link.rel = 'noopener';
+      link.target = '_self';
+      link.type = 'text/calendar';
+      document.body.appendChild(link);
+      setCalendarStatus('Calendar opened. On iPhone, tap Add All, choose a calendar, then tap Add.');
       link.click();
       link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setCalendarStatus('Reminder file downloaded. Open it and add the recurring event to your calendar.');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
+    } catch {
       setCalendarStatus('The calendar reminder could not be created on this device.');
     }
   };
@@ -1063,7 +1053,7 @@ export default function Home() {
     ? runnerMessageSelection.message
     : null;
   const thisWeekProgress = summarizeProgress(workoutSessions, 'week');
-  const progressStreaks = calculateProgressStreaks(workoutSessions, new Date(), settings.weeklyWorkoutGoal);
+  const progressStreaks = calculateProgressStreaks(workoutSessions, new Date(), settings.weeklyActiveDayGoal);
 
   if (screen === 'editor') {
     return (
@@ -1124,11 +1114,11 @@ export default function Home() {
           <div className="settings-group">
             <p className="settings-kicker">TRAINING</p>
             <div className="setting-row goal-setting-row">
-              <div><strong>Weekly goal</strong><small>Sets your goal streak and milestone pace</small></div>
-              <div className="goal-stepper" aria-label="Weekly workout goal">
-                <button aria-label="Decrease weekly goal" disabled={settings.weeklyWorkoutGoal <= 1} onClick={() => changeWeeklyGoal(-1)}>-</button>
-                <output><strong>{settings.weeklyWorkoutGoal}</strong><small>/ week</small></output>
-                <button aria-label="Increase weekly goal" disabled={settings.weeklyWorkoutGoal >= 7} onClick={() => changeWeeklyGoal(1)}>+</button>
+              <div><strong>Active days per week</strong><small>Sets your goal streak and milestone pace</small></div>
+              <div className="goal-stepper" aria-label="Weekly active-day goal">
+                <button aria-label="Decrease weekly active-day goal" disabled={settings.weeklyActiveDayGoal <= 1} onClick={() => changeWeeklyActiveDayGoal(-1)}>-</button>
+                <output><strong>{settings.weeklyActiveDayGoal}</strong><small>/ week</small></output>
+                <button aria-label="Increase weekly active-day goal" disabled={settings.weeklyActiveDayGoal >= 7} onClick={() => changeWeeklyActiveDayGoal(1)}>+</button>
               </div>
             </div>
             <fieldset className="reminder-settings">
@@ -1162,7 +1152,7 @@ export default function Home() {
                   onBlur={() => setSettings((current) => ({ ...current, reminderTime: normalizeReminderTime(current.reminderTime) }))}
                 />
               </label>
-              <button className="calendar-reminder-button" onClick={() => { void addCalendarReminders(); }}>
+              <button className="calendar-reminder-button" onClick={addCalendarReminders}>
                 <AppIcon name="calendar" size={21} strokeWidth={1.9} />
                 <span><strong>Add reminders to Calendar</strong><small>Works after Pulse is closed</small></span>
                 <AppIcon name="arrow-right" size={18} />
@@ -1338,7 +1328,7 @@ export default function Home() {
         onTimers={() => setScreen('library')}
         onSettings={() => openSettings('progress')}
         onDeleteSession={deleteWorkoutSession}
-        weeklyGoal={settings.weeklyWorkoutGoal}
+        weeklyGoal={settings.weeklyActiveDayGoal}
       />
     );
   }
@@ -1361,7 +1351,7 @@ export default function Home() {
           {finished && (
             <div className="completion-progress-card">
               <strong>+{formatTime(workoutDuration(activeTimer))} training</strong>
-              <span>{progressStreaks.workoutsThisWeek} of {progressStreaks.weeklyGoal} workouts this week · {progressStreaks.currentActiveDays}-day streak</span>
+              <span>{progressStreaks.activeDaysThisWeek} of {progressStreaks.weeklyGoal} active days this week · {progressStreaks.currentActiveDays}-day streak</span>
               {newMilestones.length > 0 && (
                 <div className="milestone-celebration">
                   <AppIcon name="trophy" size={20} strokeWidth={2} />

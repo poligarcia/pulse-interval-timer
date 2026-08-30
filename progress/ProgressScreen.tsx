@@ -133,8 +133,8 @@ export function ProgressScreen({
             </article>
             <article className="consistency-card goal-card">
               <AppIcon name="target" size={27} strokeWidth={2} />
-              <strong>{streaks.workoutsThisWeek}/{streaks.weeklyGoal}</strong>
-              <p>weekly workouts</p>
+              <strong>{streaks.activeDaysThisWeek}/{streaks.weeklyGoal}</strong>
+              <p>active days per week</p>
               <small>{plural(streaks.weeklyGoalStreak, 'goal week')} in a row</small>
             </article>
           </div>

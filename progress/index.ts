@@ -1,5 +1,5 @@
 export {
-  DEFAULT_WEEKLY_WORKOUT_GOAL,
+  DEFAULT_WEEKLY_ACTIVE_DAY_GOAL,
   calculateProgressStreaks,
   calculateProgressMilestones,
   createWorkoutSession,

@@ -102,3 +102,12 @@ export function createWorkoutReminderCalendar(
     '',
   ].join('\r\n');
 }
+
+export function createWorkoutReminderCalendarDataUrl(
+  days: ReminderDay[],
+  time: string,
+  now = new Date(),
+) {
+  const calendar = createWorkoutReminderCalendar(days, time, now);
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`;
+}

@@ -14,13 +14,13 @@ Timers, their order and settings are stored locally in the browser. They are not
 
 ## Progress
 
-Pulse records a workout when its final phase completes. The Progress screen summarizes total training time, active Work time, completed workouts and active days across day, week and month views. It also shows active-day and configurable weekly-goal streaks, four durable training milestones and a reverse-chronological workout journal.
+Pulse records a workout when its final phase completes. The Progress screen summarizes total training time, active Work time, completed workouts and active days across day, week and month views. It also shows active-day and configurable weekly active-day goal streaks, four durable training milestones and a reverse-chronological workout journal.
 
 Workout history is stored locally on the current browser or installed PWA. Editing or deleting a timer does not rewrite past sessions because each history entry keeps a snapshot of the timer that was completed. Reset or abandoned workouts are not added to Progress.
 
 ## Workout reminders
 
-Pulse remains a static, backend-free app. In Settings, users can choose workout days and a local time, then generate a recurring iCalendar event with a display alarm. Apple Calendar, Google Calendar or another calendar app handles the reminder after the file is imported, including while Pulse is closed. The recurring event must be edited or removed in the calendar app.
+Pulse remains a static, backend-free app. In Settings, users can choose workout days and a local time, then open a recurring iCalendar event with a display alarm in their device's calendar importer. Apple Calendar, Google Calendar or another calendar app handles the reminder after the event is imported, including while Pulse is closed. The recurring event must be edited or removed in the calendar app.
 
 True Web Push is intentionally not enabled in this release because scheduled push delivery requires a server to retain browser subscriptions and send messages at the selected time.
 

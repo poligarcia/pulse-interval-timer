@@ -85,6 +85,7 @@ test('summarizes the current day, week, and month from session records', () => {
 test('keeps an active-day streak alive through yesterday and tracks weekly goals', () => {
   const sessions = [
     session('2026-08-29', 'day-29'),
+    session('2026-08-29', 'day-29-second-workout'),
     session('2026-08-28', 'day-28'),
     session('2026-08-27', 'day-27'),
     session('2026-08-23', 'week-1a'),
@@ -95,7 +96,7 @@ test('keeps an active-day streak alive through yesterday and tracks weekly goals
 
   assert.equal(streaks.currentActiveDays, 3);
   assert.equal(streaks.longestActiveDays, 3);
-  assert.equal(streaks.workoutsThisWeek, 3);
+  assert.equal(streaks.activeDaysThisWeek, 3);
   assert.equal(streaks.weeklyGoalStreak, 2);
   assert.equal(streaks.longestWeeklyGoalStreak, 2);
 });

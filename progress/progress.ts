@@ -10,7 +10,7 @@ import type {
 } from './types.ts';
 
 const DAY_MS = 86_400_000;
-export const DEFAULT_WEEKLY_WORKOUT_GOAL = 3;
+export const DEFAULT_WEEKLY_ACTIVE_DAY_GOAL = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -215,19 +215,21 @@ export function progressBuckets(
   });
 }
 
-function workoutsByWeek(sessions: WorkoutSession[]) {
-  const counts = new Map<string, number>();
+function activeDaysByWeek(sessions: WorkoutSession[]) {
+  const activeDays = new Map<string, Set<string>>();
   for (const session of sessions) {
     const week = startOfWeekKey(session.localDate);
-    counts.set(week, (counts.get(week) ?? 0) + 1);
+    const days = activeDays.get(week) ?? new Set<string>();
+    days.add(session.localDate);
+    activeDays.set(week, days);
   }
-  return counts;
+  return new Map([...activeDays].map(([week, days]) => [week, days.size]));
 }
 
 export function calculateProgressStreaks(
   sessions: WorkoutSession[],
   now = new Date(),
-  weeklyGoal = DEFAULT_WEEKLY_WORKOUT_GOAL,
+  weeklyGoal = DEFAULT_WEEKLY_ACTIVE_DAY_GOAL,
 ): ProgressStreaks {
   const activeDates = [...new Set(sessions.map((session) => session.localDate))].sort();
   const activeDateSet = new Set(activeDates);
@@ -254,11 +256,11 @@ export function calculateProgressStreaks(
     previousOrdinal = ordinal;
   }
 
-  const weeklyCounts = workoutsByWeek(sessions);
+  const weeklyCounts = activeDaysByWeek(sessions);
   const currentWeek = startOfWeekKey(now);
-  const workoutsThisWeek = weeklyCounts.get(currentWeek) ?? 0;
+  const activeDaysThisWeek = weeklyCounts.get(currentWeek) ?? 0;
   const previousWeek = addDays(currentWeek, -7);
-  const weeklyAnchor = workoutsThisWeek >= weeklyGoal
+  const weeklyAnchor = activeDaysThisWeek >= weeklyGoal
     ? currentWeek
     : (weeklyCounts.get(previousWeek) ?? 0) >= weeklyGoal
       ? previousWeek
@@ -293,7 +295,7 @@ export function calculateProgressStreaks(
     currentActiveDays,
     longestActiveDays,
     weeklyGoal,
-    workoutsThisWeek,
+    activeDaysThisWeek,
     weeklyGoalStreak,
     longestWeeklyGoalStreak,
   };
@@ -302,7 +304,7 @@ export function calculateProgressStreaks(
 export function calculateProgressMilestones(
   sessions: WorkoutSession[],
   now = new Date(),
-  weeklyGoal = DEFAULT_WEEKLY_WORKOUT_GOAL,
+  weeklyGoal = DEFAULT_WEEKLY_ACTIVE_DAY_GOAL,
 ): ProgressMilestone[] {
   const streaks = calculateProgressStreaks(sessions, now, weeklyGoal);
   const totalSeconds = sessions.reduce((sum, session) => sum + session.totalSeconds, 0);

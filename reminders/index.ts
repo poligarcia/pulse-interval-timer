@@ -3,6 +3,7 @@ export {
   DEFAULT_REMINDER_TIME,
   REMINDER_DAY_OPTIONS,
   createWorkoutReminderCalendar,
+  createWorkoutReminderCalendarDataUrl,
   nextReminderDate,
   normalizeReminderDays,
   normalizeReminderTime,

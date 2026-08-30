@@ -47,7 +47,7 @@ export type ProgressStreaks = {
   currentActiveDays: number;
   longestActiveDays: number;
   weeklyGoal: number;
-  workoutsThisWeek: number;
+  activeDaysThisWeek: number;
   weeklyGoalStreak: number;
   longestWeeklyGoalStreak: number;
 };

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createWorkoutReminderCalendar,
+  createWorkoutReminderCalendarDataUrl,
   nextReminderDate,
   normalizeReminderDays,
   normalizeReminderTime,
@@ -36,4 +37,17 @@ test('creates a recurring iCalendar event with an operating-system alarm', () =>
   assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
   assert.match(calendar, /BEGIN:VALARM\r\nTRIGGER:PT0M/);
   assert.match(calendar, /SUMMARY:Pulse workout/);
+});
+
+test('creates a text/calendar URL that browsers can open for calendar import', () => {
+  const url = createWorkoutReminderCalendarDataUrl(
+    [1, 3, 5],
+    '18:00',
+    new Date(2026, 7, 30, 12, 0),
+  );
+  const calendar = decodeURIComponent(url.slice(url.indexOf(',') + 1));
+
+  assert.match(url, /^data:text\/calendar;charset=utf-8,/);
+  assert.match(calendar, /BEGIN:VCALENDAR\r\n/);
+  assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
 });
