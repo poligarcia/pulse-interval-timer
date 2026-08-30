@@ -9,6 +9,7 @@ import {
   curateVoices,
   deriveCoachContext,
   makeCountdownSpeech,
+  makeDisplayMessageSpeech,
   makePreviewSpeech,
   planCoachIntervention,
   resolveActiveCoach,
@@ -531,7 +532,7 @@ export default function Home() {
         : null;
     if (!kind) {
       setRunnerMessageSelection(null);
-      return;
+      return null;
     }
 
     const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current);
@@ -541,7 +542,9 @@ export default function Home() {
     } catch {
       // Message rotation still works when device storage is unavailable.
     }
-    setRunnerMessageSelection({ phaseIndex: index, kind, message: selection.message });
+    const runnerSelection = { phaseIndex: index, kind, message: selection.message };
+    setRunnerMessageSelection(runnerSelection);
+    return runnerSelection;
   }, []);
 
   const finishPhase = useCallback(() => {
@@ -556,7 +559,8 @@ export default function Home() {
       void playCue('complete');
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-      speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: true });
+      const finishingFromCooldown = sequence[phaseIndex]?.kind === 'cooldown';
+      speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: !finishingFromCooldown });
       releaseWakeLock();
       transitionLockRef.current = false;
       return;
@@ -567,8 +571,13 @@ export default function Home() {
     setRemaining(upcoming.duration);
     lastTickSecondRef.current = upcoming.duration;
     deadlineRef.current = Date.now() + upcoming.duration * 1000;
-    selectRunnerMessage(upcoming, nextIndex);
+    const messageSelection = selectRunnerMessage(upcoming, nextIndex);
     announcePhase(upcoming, nextIndex);
+    if (messageSelection) {
+      const personality = activeCoachRef.current?.personality
+        ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+      speakCoach(makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message));
+    }
     transitionLockRef.current = false;
   }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, speakCoach]);
 
@@ -713,7 +722,14 @@ export default function Home() {
       deadlineRef.current = Date.now() + remaining * 1000;
       lastTickSecondRef.current = remaining;
       setRunning(true);
-      if (currentPhase) announcePhase(currentPhase, phaseIndex);
+      if (currentPhase) {
+        announcePhase(currentPhase, phaseIndex);
+        if (runnerMessageSelection?.phaseIndex === phaseIndex) {
+          const personality = activeCoachRef.current?.personality
+            ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+          speakCoach(makeDisplayMessageSpeech(personality, runnerMessageSelection.kind, runnerMessageSelection.message));
+        }
+      }
       void requestWakeLock();
     }
   };
@@ -1000,7 +1016,7 @@ export default function Home() {
           <p className="phase-kicker">{finished ? 'SESSION' : PHASE_META[currentPhase?.kind ?? 'prepare'].short}</p>
           <h1>{finished ? 'Complete' : currentPhase?.label}</h1>
           <div className="giant-time">{finished ? '✓' : formatTime(remaining)}</div>
-          {runnerMessage && !finished && (
+          {runnerMessage && (
             <figure className={`runner-message ${currentPhase?.kind === 'cooldown' ? 'reflection' : ''}`}>
               <blockquote>“{runnerMessage.text}”</blockquote>
               <figcaption>— {runnerMessage.author}</figcaption>

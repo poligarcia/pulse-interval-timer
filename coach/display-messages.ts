@@ -1,4 +1,6 @@
 import { ASPIRATIONAL_MESSAGES, MOTIVATIONAL_MESSAGES } from './display-message-data.ts';
+import { makeCoachSpeech } from './personalities.ts';
+import type { CoachPersonalityId } from './types.ts';
 
 export type DisplayMessageKind = 'motivation' | 'aspiration';
 
@@ -64,4 +66,18 @@ export function selectDisplayMessage(
       [kind]: [...recentIds, message.id].slice(-recentLimit(kind)),
     },
   };
+}
+
+export function makeDisplayMessageSpeech(
+  personalityId: CoachPersonalityId,
+  kind: DisplayMessageKind,
+  message: DisplayMessage,
+) {
+  return makeCoachSpeech(
+    personalityId,
+    `display-${message.id}`,
+    message.text,
+    'contextual',
+    kind === 'motivation' ? 'encourage' : 'acknowledge',
+  );
 }

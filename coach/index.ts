@@ -1,5 +1,5 @@
 export { deriveCoachContext } from './context.ts';
-export { createDisplayMessageMemory, selectDisplayMessage } from './display-messages.ts';
+export { createDisplayMessageMemory, makeDisplayMessageSpeech, selectDisplayMessage } from './display-messages.ts';
 export { createCoachMemory, planCoachIntervention } from './interventions.ts';
 export {
   COACH_PERSONALITIES,

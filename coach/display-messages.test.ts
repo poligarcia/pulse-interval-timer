@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ASPIRATIONAL_MESSAGES, MOTIVATIONAL_MESSAGES } from './display-message-data.ts';
-import { createDisplayMessageMemory, selectDisplayMessage } from './display-messages.ts';
+import { createDisplayMessageMemory, makeDisplayMessageSpeech, selectDisplayMessage } from './display-messages.ts';
 
 test('display messages use the supplied random source', () => {
   const memory = createDisplayMessageMemory();
@@ -9,6 +9,20 @@ test('display messages use the supplied random source', () => {
   const last = selectDisplayMessage('motivation', memory, () => 0.999);
 
   assert.notEqual(first.message.id, last.message.id);
+});
+
+test('display messages become coach speech with phase-appropriate delivery', () => {
+  const motivation = MOTIVATIONAL_MESSAGES[0];
+  const aspiration = ASPIRATIONAL_MESSAGES[0];
+  const motivationalSpeech = makeDisplayMessageSpeech('energetic', 'motivation', motivation);
+  const aspirationalSpeech = makeDisplayMessageSpeech('calm', 'aspiration', aspiration);
+
+  assert.equal(motivationalSpeech.id, `display-${motivation.id}`);
+  assert.equal(motivationalSpeech.text, motivation.text);
+  assert.equal(motivationalSpeech.intent, 'encourage');
+  assert.equal(aspirationalSpeech.id, `display-${aspiration.id}`);
+  assert.equal(aspirationalSpeech.text, aspiration.text);
+  assert.equal(aspirationalSpeech.intent, 'acknowledge');
 });
 
 test('display message libraries have the reviewed target sizes and unique content', () => {
