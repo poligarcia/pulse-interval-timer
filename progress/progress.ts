@@ -1,5 +1,6 @@
 import type {
   ProgressBucket,
+  ProgressMilestone,
   ProgressPeriod,
   ProgressStreaks,
   ProgressSummary,
@@ -272,13 +273,84 @@ export function calculateProgressStreaks(
     }
   }
 
+  const qualifiedWeeks = [...weeklyCounts.entries()]
+    .filter(([, count]) => count >= weeklyGoal)
+    .map(([week]) => week)
+    .sort();
+  let longestWeeklyGoalStreak = 0;
+  let runningWeeklyGoalStreak = 0;
+  let previousWeekOrdinal: number | null = null;
+  for (const week of qualifiedWeeks) {
+    const ordinal = calendarOrdinal(week);
+    runningWeeklyGoalStreak = previousWeekOrdinal !== null && ordinal === previousWeekOrdinal + 7
+      ? runningWeeklyGoalStreak + 1
+      : 1;
+    longestWeeklyGoalStreak = Math.max(longestWeeklyGoalStreak, runningWeeklyGoalStreak);
+    previousWeekOrdinal = ordinal;
+  }
+
   return {
     currentActiveDays,
     longestActiveDays,
     weeklyGoal,
     workoutsThisWeek,
     weeklyGoalStreak,
+    longestWeeklyGoalStreak,
   };
+}
+
+export function calculateProgressMilestones(
+  sessions: WorkoutSession[],
+  now = new Date(),
+  weeklyGoal = DEFAULT_WEEKLY_WORKOUT_GOAL,
+): ProgressMilestone[] {
+  const streaks = calculateProgressStreaks(sessions, now, weeklyGoal);
+  const totalSeconds = sessions.reduce((sum, session) => sum + session.totalSeconds, 0);
+  const totalHours = totalSeconds / 3600;
+  const hoursProgressLabel = totalSeconds === 0
+    ? '0 / 5 hours'
+    : totalHours < 0.1
+      ? '<0.1 / 5 hours'
+      : `${Math.min(totalHours, 5).toFixed(1)} / 5 hours`;
+
+  return [
+    {
+      id: 'first-workout',
+      title: 'First step',
+      description: 'Complete your first workout.',
+      progress: Math.min(sessions.length, 1),
+      target: 1,
+      progressLabel: sessions.length > 0 ? 'Complete' : '0 / 1 workout',
+      unlocked: sessions.length >= 1,
+    },
+    {
+      id: 'ten-workouts',
+      title: 'Momentum',
+      description: 'Complete 10 workouts.',
+      progress: Math.min(sessions.length, 10),
+      target: 10,
+      progressLabel: `${Math.min(sessions.length, 10)} / 10 workouts`,
+      unlocked: sessions.length >= 10,
+    },
+    {
+      id: 'two-goal-weeks',
+      title: 'In rhythm',
+      description: 'Reach your goal two weeks in a row.',
+      progress: Math.min(streaks.longestWeeklyGoalStreak, 2),
+      target: 2,
+      progressLabel: `${Math.min(streaks.longestWeeklyGoalStreak, 2)} / 2 goal weeks`,
+      unlocked: streaks.longestWeeklyGoalStreak >= 2,
+    },
+    {
+      id: 'five-hours',
+      title: 'Five-hour club',
+      description: 'Accumulate five hours of training.',
+      progress: Math.min(totalHours, 5),
+      target: 5,
+      progressLabel: hoursProgressLabel,
+      unlocked: totalHours >= 5,
+    },
+  ];
 }
 
 function historyDateLabel(key: string) {

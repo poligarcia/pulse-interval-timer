@@ -1,6 +1,7 @@
 export {
   DEFAULT_WEEKLY_WORKOUT_GOAL,
   calculateProgressStreaks,
+  calculateProgressMilestones,
   createWorkoutSession,
   groupWorkoutHistory,
   localDateKey,
@@ -10,6 +11,8 @@ export {
 } from './progress.ts';
 export type {
   ProgressBucket,
+  ProgressMilestone,
+  ProgressMilestoneId,
   ProgressPeriod,
   ProgressStreaks,
   ProgressSummary,

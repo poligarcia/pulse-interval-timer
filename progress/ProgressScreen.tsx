@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { AppIcon } from '@/components/AppIcon';
 import {
   calculateProgressStreaks,
+  calculateProgressMilestones,
   groupWorkoutHistory,
   progressBuckets,
   summarizeProgress,
@@ -17,6 +18,7 @@ type ProgressScreenProps = {
   onTimers: () => void;
   onSettings: () => void;
   onDeleteSession: (sessionId: string) => void;
+  weeklyGoal: number;
 };
 
 const PERIOD_LABELS: Record<ProgressPeriod, string> = {
@@ -50,12 +52,14 @@ export function ProgressScreen({
   onTimers,
   onSettings,
   onDeleteSession,
+  weeklyGoal,
 }: ProgressScreenProps) {
   const [period, setPeriod] = useState<ProgressPeriod>('week');
   const [now] = useState(() => new Date());
   const summary = useMemo(() => summarizeProgress(sessions, period, now), [now, period, sessions]);
   const buckets = useMemo(() => progressBuckets(sessions, period, now), [now, period, sessions]);
-  const streaks = useMemo(() => calculateProgressStreaks(sessions, now), [now, sessions]);
+  const streaks = useMemo(() => calculateProgressStreaks(sessions, now, weeklyGoal), [now, sessions, weeklyGoal]);
+  const milestones = useMemo(() => calculateProgressMilestones(sessions, now, weeklyGoal), [now, sessions, weeklyGoal]);
   const history = useMemo(() => groupWorkoutHistory(sessions), [sessions]);
   const maxBucket = Math.max(1, ...buckets.map((bucket) => bucket.totalSeconds));
 
@@ -133,6 +137,27 @@ export function ProgressScreen({
               <p>weekly workouts</p>
               <small>{plural(streaks.weeklyGoalStreak, 'goal week')} in a row</small>
             </article>
+          </div>
+        </section>
+
+        <section className="milestones-panel" aria-labelledby="milestones-title">
+          <div className="progress-section-heading">
+            <div><p className="eyebrow">MILESTONES</p><h2 id="milestones-title">Build your record</h2></div>
+            <span>{milestones.filter(({ unlocked }) => unlocked).length}/{milestones.length} unlocked</span>
+          </div>
+          <div className="milestone-grid">
+            {milestones.map((milestone) => {
+              const level = Math.round((milestone.progress / milestone.target) * 100);
+              const style = { '--milestone-level': `${level}%` } as CSSProperties;
+              return (
+                <article className={`milestone-card ${milestone.unlocked ? 'unlocked' : ''}`} key={milestone.id}>
+                  <AppIcon name={milestone.unlocked ? 'check' : 'trophy'} size={23} strokeWidth={2} />
+                  <div><strong>{milestone.title}</strong><p>{milestone.description}</p></div>
+                  <span className="milestone-progress" aria-hidden="true"><i style={style} /></span>
+                  <small>{milestone.progressLabel}</small>
+                </article>
+              );
+            })}
           </div>
         </section>
 

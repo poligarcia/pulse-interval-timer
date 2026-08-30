@@ -1,7 +1,7 @@
 {
   "name": "Pulse — Interval Timer",
   "short_name": "Pulse",
-  "description": "Custom interval workouts with progress history, streaks and offline support.",
+  "description": "Custom interval workouts with progress history, goals, milestones, reminders and offline support.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

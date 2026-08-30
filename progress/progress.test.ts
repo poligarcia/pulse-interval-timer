@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   calculateProgressStreaks,
+  calculateProgressMilestones,
   createWorkoutSession,
   groupWorkoutHistory,
   parseWorkoutSessions,
@@ -96,6 +97,31 @@ test('keeps an active-day streak alive through yesterday and tracks weekly goals
   assert.equal(streaks.longestActiveDays, 3);
   assert.equal(streaks.workoutsThisWeek, 3);
   assert.equal(streaks.weeklyGoalStreak, 2);
+  assert.equal(streaks.longestWeeklyGoalStreak, 2);
+});
+
+test('tracks milestone progress from durable workout history', () => {
+  const sessions = [
+    session('2026-08-30', 'current-a'),
+    session('2026-08-29', 'current-b'),
+    session('2026-08-28', 'current-c'),
+    session('2026-08-23', 'previous-a'),
+    session('2026-08-22', 'previous-b'),
+    session('2026-08-21', 'previous-c'),
+    session('2026-08-20', 'extra-a'),
+    session('2026-08-19', 'extra-b'),
+    session('2026-08-18', 'extra-c'),
+    session('2026-08-17', 'extra-d'),
+  ];
+  const milestones = calculateProgressMilestones(sessions, new Date(2026, 7, 30, 12), 3);
+
+  assert.deepEqual(milestones.map(({ id, unlocked }) => [id, unlocked]), [
+    ['first-workout', true],
+    ['ten-workouts', true],
+    ['two-goal-weeks', true],
+    ['five-hours', false],
+  ]);
+  assert.equal(milestones.find(({ id }) => id === 'five-hours')?.progressLabel, '1.7 / 5 hours');
 });
 
 test('builds chart buckets and reverse-chronological history groups', () => {

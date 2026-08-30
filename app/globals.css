@@ -423,6 +423,28 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .setting-note { margin: 0; padding: 12px 16px 15px; color: #747b7c; background: #171a1c; font-size: 10px; line-height: 1.4; }
 .setting-note.secondary { padding-top: 0; }
 .setting-action:disabled { cursor: not-allowed; opacity: .42; }
+.goal-stepper { display: grid; grid-template-columns: 34px 54px 34px; align-items: stretch; gap: 0 !important; overflow: hidden; border: 1px solid #41484b; border-radius: 12px; }
+.goal-stepper button { border: 0; color: white; background: #202527; font-size: 18px; font-weight: 900; }
+.goal-stepper button:disabled { color: #53595b; }
+.goal-stepper output { display: grid; place-items: center; align-content: center; gap: 1px; min-height: 48px; border-right: 1px solid #41484b; border-left: 1px solid #41484b; color: var(--lime); }
+.goal-stepper output strong { font-size: 21px; line-height: 1; }
+.goal-stepper output small { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.reminder-settings { margin: 0; padding: 16px; border: 0; border-bottom: 1px solid #2d3234; }
+.reminder-settings legend { float: left; width: 100%; padding: 0; color: white; font-size: 16px; font-weight: 900; letter-spacing: -.02em; }
+.reminder-settings > p:first-of-type { clear: both; margin: 6px 0 13px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.reminder-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.reminder-days button { aspect-ratio: 1; min-width: 0; border: 1px solid #41484b; border-radius: 10px; color: #aeb4b4; background: #202527; font-size: 10px; font-weight: 950; }
+.reminder-days button.selected { border-color: var(--lime); color: var(--ink); background: var(--lime); }
+.reminder-time-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 0; }
+.reminder-time-row > span { display: grid; gap: 4px; }
+.reminder-time-row strong { font-size: 13px; }
+.reminder-time-row small { color: var(--muted); font-size: 9px; }
+.reminder-time-row input { width: 112px; min-height: 43px; padding: 8px 10px; border: 1px solid #41484b; border-radius: 11px; color: white; background: #202527; font: inherit; font-size: 13px; color-scheme: dark; }
+.calendar-reminder-button { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; width: 100%; padding: 13px; border: 1px solid #556330; border-radius: 13px; color: var(--lime); background: #1e261c; text-align: left; }
+.calendar-reminder-button > span { display: grid; gap: 3px; }
+.calendar-reminder-button strong { font-size: 12px; }
+.calendar-reminder-button small { color: #9da88c; font-size: 9px; }
+.calendar-status { margin: 11px 1px 0 !important; color: #b6c697 !important; font-size: 9px !important; }
 .mini-play { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; color: var(--ink); background: var(--lime); vertical-align: middle; }
 .mini-play .play-glyph { margin-left: 2px; border-top-width: 4px; border-bottom-width: 4px; border-left-width: 7px; }
 
@@ -508,6 +530,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .completion-progress-card { display: grid; justify-items: center; gap: 6px; width: min(520px, 100%); margin: 0 0 16px; padding: 15px 18px; border: 1px solid rgb(18 20 22 / 20%); border-radius: 18px; background: rgb(255 255 255 / 25%); text-align: center; }
 .completion-progress-card strong { font-size: 19px; letter-spacing: -.03em; }
 .completion-progress-card span { font-size: 11px; font-weight: 800; }
+.milestone-celebration { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; width: min(330px, 100%); margin-top: 5px; padding: 9px 11px; border: 1px solid rgb(18 20 22 / 22%); border-radius: 12px; background: rgb(255 255 255 / 25%); text-align: left; }
+.milestone-celebration > span { display: grid; gap: 2px; }
+.milestone-celebration strong { font-size: 11px; }
 .completion-progress-card button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 0; border: 0; color: var(--ink); background: transparent; font-size: 11px; font-weight: 1000; text-transform: uppercase; letter-spacing: .06em; }
 .phase-progress { width: min(560px, 100%); height: 8px; overflow: hidden; border-radius: 99px; background: rgb(18 20 22 / 18%); }
 .phase-progress span { display: block; height: 100%; background: var(--ink); transition: width .15s linear; }
@@ -539,7 +564,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .period-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 12px 0 27px; padding: 5px; border: 1px solid #303638; border-radius: 15px; background: #191d1f; }
 .period-tabs button { min-height: 40px; border: 0; border-radius: 10px; color: #858b8c; background: transparent; font-size: 10px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
 .period-tabs button.selected { color: var(--ink); background: var(--lime); }
-.activity-panel, .consistency-panel { margin-bottom: 29px; }
+.activity-panel, .consistency-panel, .milestones-panel { margin-bottom: 29px; }
 .progress-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 0 4px 14px; }
 .progress-section-heading h2 { margin: 0; font-size: 27px; line-height: 1; letter-spacing: -.055em; }
 .progress-section-heading > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
@@ -557,6 +582,19 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .consistency-card strong { align-self: end; color: white; font-size: 54px; line-height: .85; letter-spacing: -.08em; }
 .consistency-card p { margin: 8px 0 0; font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: .035em; }
 .consistency-card small { align-self: end; margin-top: 13px; color: var(--muted); font-size: 9px; font-weight: 800; }
+.milestone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.milestone-card { position: relative; display: grid; align-content: space-between; gap: 11px; min-height: 150px; padding: 16px; border: 1px solid #303638; border-radius: 20px; color: #8a9291; background: var(--ink-soft); }
+.milestone-card > .app-icon { position: absolute; top: 15px; right: 15px; color: #56605f; }
+.milestone-card > div { display: grid; gap: 5px; padding-right: 26px; }
+.milestone-card strong { color: #c0c6c5; font-size: 15px; letter-spacing: -.02em; }
+.milestone-card p { margin: 0; font-size: 9px; line-height: 1.35; }
+.milestone-card small { font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.milestone-card.unlocked { border-color: #53652d; background: linear-gradient(145deg, #20271d, #1a1f1e); }
+.milestone-card.unlocked > .app-icon, .milestone-card.unlocked small { color: var(--lime); }
+.milestone-card.unlocked strong { color: white; }
+.milestone-progress { position: relative; display: block; height: 5px; overflow: hidden; border-radius: 99px; background: #343a3c; }
+.milestone-progress i { position: absolute; inset: 0 auto 0 0; width: var(--milestone-level); border-radius: inherit; background: #687271; }
+.milestone-card.unlocked .milestone-progress i { background: var(--lime); }
 .history-title-row { margin-bottom: 11px; }
 .history-months { display: grid; gap: 24px; }
 .history-month { min-width: 0; }

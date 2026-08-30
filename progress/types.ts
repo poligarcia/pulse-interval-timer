@@ -49,6 +49,19 @@ export type ProgressStreaks = {
   weeklyGoal: number;
   workoutsThisWeek: number;
   weeklyGoalStreak: number;
+  longestWeeklyGoalStreak: number;
+};
+
+export type ProgressMilestoneId = 'first-workout' | 'ten-workouts' | 'two-goal-weeks' | 'five-hours';
+
+export type ProgressMilestone = {
+  id: ProgressMilestoneId;
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  progressLabel: string;
+  unlocked: boolean;
 };
 
 export type WorkoutHistoryDay = {

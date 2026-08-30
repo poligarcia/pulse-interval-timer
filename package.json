@@ -1,6 +1,6 @@
 {
   "name": "pulse-interval-timer",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -11,7 +11,7 @@
     "build:github": "GITHUB_ACTIONS=true next build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node --experimental-strip-types --test coach/*.test.ts progress/*.test.ts"
+    "test": "node --experimental-strip-types --test coach/*.test.ts progress/*.test.ts reminders/*.test.ts"
   },
   "dependencies": {
     "next": "16.2.6",

@@ -1,6 +1,7 @@
 export type AppIconName =
   | 'arrow-left'
   | 'arrow-right'
+  | 'calendar'
   | 'check'
   | 'chevron-down'
   | 'chevron-up'
@@ -11,7 +12,8 @@ export type AppIconName =
   | 'reset'
   | 'settings'
   | 'target'
-  | 'timer';
+  | 'timer'
+  | 'trophy';
 
 type AppIconProps = {
   name: AppIconName;
@@ -26,6 +28,8 @@ function IconPaths({ name }: Pick<AppIconProps, 'name'>) {
       return <><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></>;
     case 'arrow-right':
       return <><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></>;
+    case 'calendar':
+      return <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /><path d="m9 15 2 2 4-4" /></>;
     case 'check':
       return <path d="m5 12 4 4L19 6" />;
     case 'chevron-down':
@@ -48,6 +52,8 @@ function IconPaths({ name }: Pick<AppIconProps, 'name'>) {
       return <><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3.5" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></>;
     case 'timer':
       return <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.8 1.8M9 2h6M12 5V2" /></>;
+    case 'trophy':
+      return <><path d="M8 3h8v4c0 4-1.8 6-4 6s-4-2-4-6V3Z" /><path d="M8 5H4v2c0 2.2 1.8 4 4 4M16 5h4v2c0 2.2-1.8 4-4 4M12 13v4M8 21h8M9 17h6" /></>;
   }
 }
 
