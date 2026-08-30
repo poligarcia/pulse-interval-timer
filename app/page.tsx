@@ -73,6 +73,12 @@ const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
 const DISPLAY_MESSAGE_MEMORY_STORAGE = 'pulse-display-message-memory-v1';
 const HOME_TIMER_LIMIT = 4;
+const RECOVERY_SPEECH_PAUSE_MS = 400;
+
+type ScreenWakeLock = {
+  release: () => Promise<void>;
+  addEventListener?: (type: 'release', listener: () => void, options?: AddEventListenerOptions) => void;
+};
 
 function generatedTimerName(timer: Pick<TimerConfig, 'work' | 'rest' | 'rounds' | 'cycles'>) {
   const cycles = timer.cycles > 1 ? ` X ${timer.cycles}` : '';
@@ -318,7 +324,10 @@ export default function Home() {
   const deadlineRef = useRef(0);
   const transitionLockRef = useRef(false);
   const lastTickSecondRef = useRef<number | null>(null);
-  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const wakeLockRef = useRef<ScreenWakeLock | null>(null);
+  const wakeLockWantedRef = useRef(false);
+  const coachSpeechGenerationRef = useRef(0);
+  const pendingCoachSpeechTimeoutRef = useRef<number | null>(null);
 
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
   const currentPhase = sequence[phaseIndex];
@@ -438,9 +447,18 @@ export default function Home() {
     return played;
   }, [playTone]);
 
+  const cancelCoachSpeech = useCallback(() => {
+    coachSpeechGenerationRef.current += 1;
+    if (pendingCoachSpeechTimeoutRef.current !== null) {
+      window.clearTimeout(pendingCoachSpeechTimeoutRef.current);
+      pendingCoachSpeechTimeoutRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+  }, []);
+
   const speakCoach = useCallback((speech: CoachSpeech, options?: { interrupt?: boolean; voiceURI?: string }) => {
     if (!settings.voiceEnabled || !('speechSynthesis' in window)) return;
-    if (options?.interrupt) window.speechSynthesis.cancel();
+    if (options?.interrupt) cancelCoachSpeech();
     const utterance = new SpeechSynthesisUtterance(speech.text);
     const voiceURI = options?.voiceURI ?? activeCoachRef.current?.voiceURI ?? '';
     const liveVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
@@ -451,7 +469,23 @@ export default function Home() {
     utterance.pitch = speech.pitch;
     utterance.volume = settings.volume;
     window.speechSynthesis.speak(utterance);
-  }, [availableVoices, settings.voiceEnabled, settings.volume]);
+    return utterance;
+  }, [availableVoices, cancelCoachSpeech, settings.voiceEnabled, settings.volume]);
+
+  const speakCoachAfterPause = useCallback((
+    precedingUtterance: SpeechSynthesisUtterance | undefined,
+    speech: CoachSpeech,
+  ) => {
+    if (!precedingUtterance) return;
+    const generation = coachSpeechGenerationRef.current;
+    precedingUtterance.addEventListener('end', () => {
+      if (coachSpeechGenerationRef.current !== generation) return;
+      pendingCoachSpeechTimeoutRef.current = window.setTimeout(() => {
+        pendingCoachSpeechTimeoutRef.current = null;
+        if (coachSpeechGenerationRef.current === generation) speakCoach(speech);
+      }, RECOVERY_SPEECH_PAUSE_MS);
+    }, { once: true });
+  }, [speakCoach]);
 
   const contextForPhase = useCallback((phase: WorkoutPhase, index: number, phaseRemaining = phase.duration) => (
     deriveCoachContext({
@@ -468,7 +502,7 @@ export default function Home() {
     void playCue(phase.kind);
     const personality = activeCoachRef.current?.personality
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-    speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index)), { interrupt: true });
+    return speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index)), { interrupt: true });
   }, [contextForPhase, playCue, settings.coachPersonality, speakCoach]);
 
   const resolveWorkoutCoach = useCallback(() => {
@@ -493,19 +527,43 @@ export default function Home() {
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
-      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+      wakeLock?: { request: (type: 'screen') => Promise<ScreenWakeLock> };
     };
+    if (!wakeLockWantedRef.current || document.visibilityState !== 'visible' || wakeLockRef.current) return;
     try {
-      wakeLockRef.current = await nav.wakeLock?.request('screen') ?? null;
+      const wakeLock = await nav.wakeLock?.request('screen') ?? null;
+      if (!wakeLock) return;
+      if (!wakeLockWantedRef.current || document.visibilityState !== 'visible') {
+        void wakeLock.release().catch(() => undefined);
+        return;
+      }
+      wakeLockRef.current = wakeLock;
+      wakeLock.addEventListener?.('release', () => {
+        if (wakeLockRef.current === wakeLock) wakeLockRef.current = null;
+      }, { once: true });
     } catch {
       wakeLockRef.current = null;
     }
   }, []);
 
+  const keepScreenAwake = useCallback(() => {
+    wakeLockWantedRef.current = true;
+    void requestWakeLock();
+  }, [requestWakeLock]);
+
   const releaseWakeLock = useCallback(() => {
+    wakeLockWantedRef.current = false;
     wakeLockRef.current?.release().catch(() => undefined);
     wakeLockRef.current = null;
   }, []);
+
+  useEffect(() => {
+    const restoreWakeLock = () => {
+      if (document.visibilityState === 'visible') void requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', restoreWakeLock);
+    return () => document.removeEventListener('visibilitychange', restoreWakeLock);
+  }, [requestWakeLock]);
 
   const applyOrientation = useCallback(async (allowRotation: boolean) => {
     try {
@@ -574,14 +632,17 @@ export default function Home() {
     lastTickSecondRef.current = upcoming.duration;
     deadlineRef.current = Date.now() + upcoming.duration * 1000;
     const messageSelection = selectRunnerMessage(upcoming, nextIndex);
-    announcePhase(upcoming, nextIndex);
+    const phaseUtterance = announcePhase(upcoming, nextIndex);
     if (settings.coachPhrasesEnabled && messageSelection) {
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-      speakCoach(makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message));
+      speakCoachAfterPause(
+        phaseUtterance,
+        makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message),
+      );
     }
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach]);
+  }, [announcePhase, phaseIndex, playCue, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -618,8 +679,8 @@ export default function Home() {
 
   useEffect(() => () => {
     releaseWakeLock();
-    window.speechSynthesis?.cancel();
-  }, [releaseWakeLock]);
+    cancelCoachSpeech();
+  }, [cancelCoachSpeech, releaseWakeLock]);
 
   const openEditor = (timer?: TimerConfig, origin?: ReturnScreen) => {
     const destination = origin ?? (screen === 'library' ? 'library' : 'home');
@@ -716,7 +777,7 @@ export default function Home() {
     if (running) {
       setRemaining(Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)));
       setRunning(false);
-      window.speechSynthesis?.cancel();
+      cancelCoachSpeech();
       releaseWakeLock();
     } else {
       await ensureAudio();
@@ -725,14 +786,17 @@ export default function Home() {
       lastTickSecondRef.current = remaining;
       setRunning(true);
       if (currentPhase) {
-        announcePhase(currentPhase, phaseIndex);
+        const phaseUtterance = announcePhase(currentPhase, phaseIndex);
         if (settings.coachPhrasesEnabled && runnerMessageSelection?.phaseIndex === phaseIndex) {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-          speakCoach(makeDisplayMessageSpeech(personality, runnerMessageSelection.kind, runnerMessageSelection.message));
+          speakCoachAfterPause(
+            phaseUtterance,
+            makeDisplayMessageSpeech(personality, runnerMessageSelection.kind, runnerMessageSelection.message),
+          );
         }
       }
-      void requestWakeLock();
+      keepScreenAwake();
     }
   };
 
@@ -745,7 +809,7 @@ export default function Home() {
     setPhaseIndex(0);
     setRemaining(sequence[0]?.duration ?? 0);
     lastTickSecondRef.current = sequence[0]?.duration ?? 0;
-    window.speechSynthesis?.cancel();
+    cancelCoachSpeech();
     releaseWakeLock();
   };
 
@@ -754,7 +818,7 @@ export default function Home() {
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
-    window.speechSynthesis?.cancel();
+    cancelCoachSpeech();
     releaseWakeLock();
     try { screenOrientation().unlock?.(); } catch { /* no-op */ }
     setScreen('home');
