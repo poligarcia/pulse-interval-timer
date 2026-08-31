@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pulse-v8';
+const APP_CACHE_PREFIX = 'pulse-app-';
+const CACHE_NAME = `${APP_CACHE_PREFIX}v9`;
 const APP_SHELL = [
   './',
   './manifest.webmanifest',
@@ -17,7 +18,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      keys
+        .filter((key) => key.startsWith(APP_CACHE_PREFIX) && key !== CACHE_NAME)
+        .map((key) => caches.delete(key))
     ))
   );
   self.clients.claim();

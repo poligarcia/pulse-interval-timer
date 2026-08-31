@@ -1,55 +1,12 @@
-PULSE THIRD-PARTY CONTENT NOTICES
+# Third-party licenses — mentria-engine runtime bundle
 
-Mentria browser runtime
------------------------
+The built engine (`dist/*.mjs`) bundles exactly two third-party runtime
+libraries. Build-time tools (vite, esbuild, playwright, typescript) are not
+distributed. Attribution below satisfies the notice-preservation terms
+(bundling strips source comments).
 
-Pulse Labs vendors the complete Mentria browser runtime distribution without
-modification.
-
-Source: https://github.com/mentria-ai/website
-Pinned Git revision: 8688f15585957926a7332eda6546cb586ee9f562
-License: MIT
-License: public/mentria/LICENSE
-Bundled dependency notices: public/mentria/dist/THIRD_PARTY_LICENSES.md
-
-The bundled runtime notices cover @huggingface/tokenizers v0.1.3 under the
-Apache License 2.0 and @huggingface/jinja v0.5.6 under the MIT License.
-
-Mentria Qwen3.5 0.8B model bundle and quote LoRA
-------------------------------------------------
-
-Source: https://huggingface.co/mentriaai/Qwen3.5-0.8B-mentria
-Pinned revision: b0bdedca9258b059b1b0f8cfbb2751d12bd8dab8
-License: Apache License 2.0
-
-Pulse requests only the tied text-language weight, tokenizer assets, and the
-optional quote LoRA from this exact revision. Pulse does not request the vision
-tower. The quote LoRA has a separate download disclosure and consent step.
-
-Upstream Qwen3.5 0.8B
----------------------
-
-Source: https://huggingface.co/Qwen/Qwen3.5-0.8B
-License: Apache License 2.0
-
-Detailed source paths, exact revisions, and modification status are recorded
-in public/mentria/SOURCE.md.
-
-Mentria Motivational Quotes
----------------------------
-
-Pulse includes a reviewed selection of 120 unmodified messages from the
-Mentria Motivational Quotes dataset.
-
-Source: https://huggingface.co/datasets/mentriaai/motivational-quotes
-Pinned revision: 00cc851eefc94aedb3a3b32f4cc63ed3a48dfb86
-Source file: quotes.jsonl
-Dataset creator: Mentria
-License: Apache License 2.0
-
-The selection, stable identifiers, application integration, and Pulse
-cooldown reflections are not part of the upstream dataset.
-
+## @huggingface/tokenizers v0.1.3 — Apache License 2.0
+https://github.com/huggingface/tokenizers
 
                                  Apache License
                            Version 2.0, January 2004
@@ -252,3 +209,29 @@ cooldown reflections are not part of the upstream dataset.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+## @huggingface/jinja v0.5.6 — MIT License
+https://github.com/huggingface/huggingface.js
+
+MIT License
+
+Copyright (c) 2023 Hugging Face
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -5,6 +5,7 @@ import type {
   CoachPersonalityPreference,
   CoachPhrase,
   CoachSpeech,
+  FatigueZone,
   PhaseKind,
   SpeechDelivery,
 } from './types.ts';
@@ -186,6 +187,17 @@ export function getSpeechTuning(
     rate: clamp(personality.rate + deliveryRate + intentRate + rateOffset, 0.8, 1.3),
     pitch: clamp(personality.pitch + intentPitch + pitchOffset, 0.8, 1.2),
   };
+}
+
+export function selectDeterministicCoachPhrase(
+  personalityId: CoachPersonalityId,
+  fatigueZone: FatigueZone,
+  intent: CoachIntent,
+): CoachPhrase {
+  const phrases = COACH_PERSONALITIES[personalityId].phrases;
+  return phrases.find((phrase) => phrase.zones.includes(fatigueZone) && phrase.intent === intent)
+    ?? phrases.find((phrase) => phrase.zones.includes(fatigueZone))
+    ?? phrases[0];
 }
 
 export function makeCoachSpeech(

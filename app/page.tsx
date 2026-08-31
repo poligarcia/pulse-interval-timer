@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   COACH_PERSONALITIES,
@@ -47,6 +47,19 @@ import {
   normalizeReminderTime,
 } from '@/reminders';
 import type { ReminderDay } from '@/reminders';
+import {
+  createLabsUnlockSequence,
+  activateLabsUnlock,
+  LABS_UNLOCK_WINDOW_MS,
+} from '@/labs/unlock';
+import type { LabsUnlockSequence } from '@/labs/unlock';
+import {
+  hideLabs,
+  readLabsSettings,
+  writeLabsSettings,
+} from '@/labs/storage';
+
+const PulseLabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
 
 type TimerConfig = {
   id: string;
@@ -86,7 +99,7 @@ type WorkoutPhase = {
   cycle: number;
 };
 
-type ScreenName = 'home' | 'library' | 'progress' | 'editor' | 'runner' | 'settings';
+type ScreenName = 'home' | 'library' | 'progress' | 'editor' | 'runner' | 'settings' | 'labs';
 type ReturnScreen = 'home' | 'library' | 'progress';
 
 const APP_VERSION = '1.4.0';
@@ -385,6 +398,9 @@ export default function Home() {
   const [finished, setFinished] = useState(false);
   const [newMilestones, setNewMilestones] = useState<ProgressMilestone[]>([]);
   const [calendarStatus, setCalendarStatus] = useState('');
+  const [labsUnlocked, setLabsUnlocked] = useState(false);
+  const [labsUnlockSequence, setLabsUnlockSequence] = useState<LabsUnlockSequence>(() => createLabsUnlockSequence());
+  const [labsUnlockMessage, setLabsUnlockMessage] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [runnerMessageSelection, setRunnerMessageSelection] = useState<{
@@ -406,6 +422,9 @@ export default function Home() {
   const pendingCoachSpeechTimeoutRef = useRef<number | null>(null);
   const workoutStartedAtRef = useRef<string | null>(null);
   const recordedWorkoutSessionIdRef = useRef<string | null>(null);
+  const labsOpeningControlRef = useRef<HTMLButtonElement | null>(null);
+  const restoreLabsFocusRef = useRef(false);
+  const labsUnlockSequenceRef = useRef<LabsUnlockSequence>(createLabsUnlockSequence());
 
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
   const currentPhase = sequence[phaseIndex];
@@ -419,6 +438,7 @@ export default function Home() {
     let storedRecentTimerIds: string[] | null = null;
     let storedWorkoutSessions: WorkoutSession[] | null = null;
     let storedSettings: Settings | null = null;
+    let storedLabsUnlocked: boolean | null = null;
     try {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
@@ -426,6 +446,8 @@ export default function Home() {
       const savedWorkoutSessions = window.localStorage.getItem(WORKOUT_SESSIONS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
       const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
+      const labsSettings = readLabsSettings(window.localStorage);
+      storedLabsUnlocked = labsSettings.unlocked;
       if (savedTimers) {
         const parsed = JSON.parse(savedTimers) as TimerConfig[];
         if (Array.isArray(parsed) && parsed.length > 0) storedTimers = parsed;
@@ -455,6 +477,12 @@ export default function Home() {
       if (storedRecentTimerIds) setRecentTimerIds(storedRecentTimerIds);
       if (storedWorkoutSessions) setWorkoutSessions(storedWorkoutSessions);
       if (storedSettings) setSettings(storedSettings);
+      if (storedLabsUnlocked !== null) {
+        setLabsUnlocked(storedLabsUnlocked);
+        const sequenceState = createLabsUnlockSequence(storedLabsUnlocked);
+        labsUnlockSequenceRef.current = sequenceState;
+        setLabsUnlockSequence(sequenceState);
+      }
       setHydrated(true);
     });
 
@@ -462,6 +490,24 @@ export default function Home() {
       navigator.serviceWorker.register('./sw.js').catch(() => undefined);
     }
   }, []);
+
+  useEffect(() => {
+    if (labsUnlockSequence.unlocked || labsUnlockSequence.startedAt === null) return;
+    const delay = Math.max(0, labsUnlockSequence.startedAt + LABS_UNLOCK_WINDOW_MS - Date.now() + 1);
+    const timeout = window.setTimeout(() => {
+      const sequenceState = createLabsUnlockSequence(false);
+      labsUnlockSequenceRef.current = sequenceState;
+      setLabsUnlockSequence(sequenceState);
+      setLabsUnlockMessage('');
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [labsUnlockSequence]);
+
+  useEffect(() => {
+    if (screen !== 'settings' || !restoreLabsFocusRef.current) return;
+    restoreLabsFocusRef.current = false;
+    window.requestAnimationFrame(() => labsOpeningControlRef.current?.focus());
+  }, [screen]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -974,6 +1020,36 @@ export default function Home() {
     setScreen('settings');
   };
 
+  const activateVersionUnlock = () => {
+    const transition = activateLabsUnlock(labsUnlockSequenceRef.current, Date.now());
+    labsUnlockSequenceRef.current = transition.state;
+    setLabsUnlockSequence(transition.state);
+    if (transition.justUnlocked) {
+      setLabsUnlocked(true);
+      setLabsUnlockMessage('Pulse Labs unlocked.');
+      writeLabsSettings(window.localStorage, { version: 1, unlocked: true });
+    } else if (transition.remaining !== null) {
+      setLabsUnlockMessage(`${transition.remaining} ${transition.remaining === 1 ? 'tap' : 'taps'} until Pulse Labs.`);
+    } else {
+      setLabsUnlockMessage('');
+    }
+  };
+
+  const leaveLabs = () => {
+    restoreLabsFocusRef.current = true;
+    setScreen('settings');
+  };
+
+  const hidePulseLabs = () => {
+    hideLabs(window.localStorage);
+    setLabsUnlocked(false);
+    const sequenceState = createLabsUnlockSequence(false);
+    labsUnlockSequenceRef.current = sequenceState;
+    setLabsUnlockSequence(sequenceState);
+    setLabsUnlockMessage('');
+    setScreen('settings');
+  };
+
   const changeWeeklyActiveDayGoal = (offset: -1 | 1) => {
     setSettings((current) => ({
       ...current,
@@ -1054,6 +1130,14 @@ export default function Home() {
     : null;
   const thisWeekProgress = summarizeProgress(workoutSessions, 'week');
   const progressStreaks = calculateProgressStreaks(workoutSessions, new Date(), settings.weeklyActiveDayGoal);
+
+  if (screen === 'labs') {
+    return (
+      <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">Opening Pulse Labs…</p></main>}>
+        <PulseLabsScreen onBack={leaveLabs} onHideLabs={hidePulseLabs} />
+      </Suspense>
+    );
+  }
 
   if (screen === 'editor') {
     return (
@@ -1308,11 +1392,37 @@ export default function Home() {
             <p className="setting-note">Orientation locking depends on iOS and works best when Pulse is opened from the Home Screen.</p>
           </div>
 
+          {labsUnlocked && (
+            <div className="settings-group">
+              <p className="settings-kicker">EXPERIMENTAL</p>
+              <button ref={labsOpeningControlRef} className="setting-row setting-action" onClick={() => setScreen('labs')}>
+                <div><strong>Pulse Labs</strong><small>Local Mentria text experiments and system-voice previews</small></div>
+                <span className="setting-value">Open <AppIcon name="arrow-right" size={17} /></span>
+              </button>
+              <p className="setting-note">Opening Labs never downloads or initializes a model. Model assets require a separate confirmation.</p>
+            </div>
+          )}
+
           <footer className="version-card">
             <span className="brand-mark small">P</span>
             <div>
               <strong>Pulse</strong>
-              <small>Version {APP_VERSION} · Installable PWA · <a href="./third-party-notices.txt" target="_blank" rel="noreferrer">Content credits</a></small>
+              <small>
+                <button
+                  type="button"
+                  className="version-unlock-button"
+                  aria-label={`Pulse version ${APP_VERSION}`}
+                  onClick={activateVersionUnlock}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    activateVersionUnlock();
+                  }}
+                >Version {APP_VERSION}</button>
+                {' · Installable PWA · '}
+                <a href="./third-party-notices.txt" target="_blank" rel="noreferrer">Content credits</a>
+              </small>
+              <span className="version-unlock-status" role="status" aria-live="polite">{labsUnlockMessage}</span>
             </div>
           </footer>
         </section>
