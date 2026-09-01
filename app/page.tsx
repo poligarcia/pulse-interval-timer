@@ -1492,7 +1492,6 @@ export default function Home() {
           >
             <div className="phase-progress-label">
               <span>{finished ? 'Session' : 'Current stage'}</span>
-              <strong>{Math.round(phaseProgress * 100)}%</strong>
             </div>
             <div className="phase-progress-track" aria-hidden="true"><span style={{ width: `${phaseProgress * 100}%` }} /></div>
           </div>
