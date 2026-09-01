@@ -30,6 +30,8 @@ import type {
   PhaseKind,
   VoicePreference,
 } from '@/coach';
+import { createSpeechController } from '@/coach/speech-controller';
+import type { SpeechController } from '@/coach/speech-controller';
 import {
   calculateProgressMilestones,
   calculateProgressStreaks,
@@ -66,6 +68,8 @@ import { getMessages, localizeTimerName, LOCALE_OPTIONS, useLocale } from '@/i18
 import type { AppMessages } from '@/i18n';
 import { WorkoutAudioScheduler } from '@/workout/audio-scheduler';
 import type { ScheduledAudioHandle } from '@/workout/audio-scheduler';
+import { createBrowserAudioEngine } from '@/workout/audio-engine';
+import type { AudioEngine } from '@/workout/audio-engine';
 import { WorkoutTimeline } from '@/workout/timeline';
 import type { WorkoutTimelineEvent, WorkoutTimelineSnapshot } from '@/workout/timeline';
 
@@ -167,6 +171,12 @@ type ScreenWakeLock = {
   release: () => Promise<void>;
   addEventListener?: (type: 'release', listener: () => void, options?: AddEventListenerOptions) => void;
 };
+
+type BrowserSpeechController = SpeechController<
+  SpeechSynthesisVoice,
+  SpeechSynthesisUtterance,
+  number
+>;
 
 function generatedTimerName(timer: Pick<TimerConfig, 'work' | 'rest' | 'rounds' | 'cycles'>) {
   const cycles = timer.cycles > 1 ? ` X ${timer.cycles}` : '';
@@ -464,13 +474,17 @@ export default function Home() {
   const [labsUnlockMessage, setLabsUnlockMessage] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [audioNeedsGesture, setAudioNeedsGesture] = useState(false);
+  const [audioRestorePending, setAudioRestorePending] = useState(false);
+  const [workoutStartPending, setWorkoutStartPending] = useState(false);
   const [runnerMessageSelection, setRunnerMessageSelection] = useState<{
     phaseIndex: number;
     kind: DisplayMessageKind;
     message: DisplayMessage;
   } | null>(null);
 
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioEngineRef = useRef<AudioEngine | null>(null);
+  const speechControllerRef = useRef<BrowserSpeechController | null>(null);
   const workoutAudioSchedulerRef = useRef<WorkoutAudioScheduler | null>(null);
   const workoutTimelineRef = useRef<WorkoutTimeline | null>(null);
   const activeCoachRef = useRef<ActiveCoach | null>(null);
@@ -478,6 +492,13 @@ export default function Home() {
   const displayMessageMemoryRef = useRef<DisplayMessageMemory>(createDisplayMessageMemory());
   const transitionLockRef = useRef(false);
   const workoutRunGenerationRef = useRef(0);
+  const workoutStartPendingRef = useRef(false);
+  const workoutStartTokenRef = useRef(0);
+  const audioEnsurePromiseRef = useRef<Promise<AudioContext | null> | null>(null);
+  const audioRecoveryPromiseRef = useRef<Promise<void> | null>(null);
+  const audioRestorePromiseRef = useRef<Promise<void> | null>(null);
+  const mediaWasHiddenRef = useRef(false);
+  const suppressWorkoutCuesRef = useRef(false);
   const finishIntentRef = useRef(false);
   const resumeAfterFinishDialogRef = useRef(false);
   const lastTickSecondRef = useRef<number | null>(null);
@@ -615,36 +636,75 @@ export default function Home() {
     }
   }, [hydrated, workoutSessions]);
 
+  const getSpeechController = useCallback(() => {
+    if (speechControllerRef.current) return speechControllerRef.current;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+    const controller: BrowserSpeechController = createSpeechController({
+      synthesis: window.speechSynthesis,
+      createUtterance: (text) => new SpeechSynthesisUtterance(text),
+      setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+      clearTimer: (handle) => window.clearTimeout(handle),
+    });
+    speechControllerRef.current = controller;
+    return controller;
+  }, []);
+
   useEffect(() => {
-    if (!('speechSynthesis' in window)) return;
-    const refreshVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      setAvailableVoices(voices);
-    };
-    const timer = window.setTimeout(refreshVoices, 0);
-    window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
+    const controller = getSpeechController();
+    if (!controller) return;
+    const unsubscribeVoices = controller.subscribeVoices((voices) => {
+      setAvailableVoices([...voices]);
+    });
     return () => {
-      window.clearTimeout(timer);
-      window.speechSynthesis.removeEventListener('voiceschanged', refreshVoices);
+      unsubscribeVoices();
+      controller.dispose();
+      if (speechControllerRef.current === controller) speechControllerRef.current = null;
     };
+  }, [getSpeechController]);
+
+  const getAudioEngine = useCallback(() => {
+    if (!audioEngineRef.current) {
+      audioEngineRef.current = createBrowserAudioEngine({
+        probeDelayMs: 50,
+        resumeTimeoutMs: 450,
+      });
+    }
+    return audioEngineRef.current;
   }, []);
 
-  const ensureAudio = useCallback(async () => {
-    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-      const AudioContextClass = window.AudioContext ||
-        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (AudioContextClass) audioContextRef.current = new AudioContextClass();
-    }
+  const ensureAudio = useCallback((forceRecreate = false) => {
+    if (document.visibilityState !== 'visible') return Promise.resolve(null);
+    if (audioEnsurePromiseRef.current && !forceRecreate) return audioEnsurePromiseRef.current;
 
-    const context = audioContextRef.current;
-    if (!context) return null;
-    try {
-      if (context.state !== 'running') await context.resume();
-      return context.state === 'running' ? context : null;
-    } catch {
-      return null;
-    }
-  }, []);
+    const recovery = getAudioEngine().recover({ forceRecreate }).then(
+      (result) => {
+        if (result.status === 'ready') {
+          setAudioNeedsGesture(false);
+          return result.context;
+        }
+        if (result.status === 'needs-gesture'
+          && settingsRef.current.soundEnabled
+          && settingsRef.current.volume > 0
+          && document.visibilityState === 'visible') {
+          setAudioNeedsGesture(true);
+        }
+        return null;
+      },
+      () => {
+        if (settingsRef.current.soundEnabled
+          && settingsRef.current.volume > 0
+          && document.visibilityState === 'visible') {
+          setAudioNeedsGesture(true);
+        }
+        return null;
+      },
+    );
+    audioEnsurePromiseRef.current = recovery;
+    void recovery.finally(() => {
+      if (audioEnsurePromiseRef.current === recovery) audioEnsurePromiseRef.current = null;
+    });
+    return recovery;
+  }, [getAudioEngine]);
 
   const scheduleTone = useCallback((
     context: AudioContext,
@@ -684,7 +744,9 @@ export default function Home() {
 
   const playTone = useCallback(async (frequency: number, duration = 0.11, volumeScale = 1) => {
     const currentSettings = settingsRef.current;
-    if (!currentSettings.soundEnabled || currentSettings.volume <= 0) return false;
+    if (!currentSettings.soundEnabled
+      || currentSettings.volume <= 0
+      || document.visibilityState !== 'visible') return false;
     const context = await ensureAudio();
     if (!context) return false;
     scheduleTone(
@@ -742,6 +804,21 @@ export default function Home() {
     workoutAudioSchedulerRef.current = null;
   }, []);
 
+  const invalidatePendingWorkoutStart = useCallback(() => {
+    workoutStartTokenRef.current += 1;
+    workoutStartPendingRef.current = false;
+    setWorkoutStartPending(false);
+  }, []);
+
+  const invalidateAudioRecovery = useCallback(() => {
+    audioEngineRef.current?.invalidate();
+    audioEnsurePromiseRef.current = null;
+    audioRecoveryPromiseRef.current = null;
+    audioRestorePromiseRef.current = null;
+    setAudioNeedsGesture(false);
+    setAudioRestorePending(false);
+  }, []);
+
   const startWorkoutAudio = useCallback((
     timeline: WorkoutTimeline,
     context: AudioContext,
@@ -783,74 +860,21 @@ export default function Home() {
     return played;
   }, [playTone]);
 
-  const cancelCoachSpeech = useCallback(() => {
-    coachSpeechGenerationRef.current += 1;
-    if (pendingCoachSpeechTimeoutRef.current !== null) {
-      window.clearTimeout(pendingCoachSpeechTimeoutRef.current);
-      pendingCoachSpeechTimeoutRef.current = null;
-    }
-    window.speechSynthesis?.cancel();
-  }, []);
-
-  const speakCoach = useCallback((speech: CoachSpeech, options?: { interrupt?: boolean; voiceURI?: string }) => {
-    if (!settings.voiceEnabled || !('speechSynthesis' in window)) return;
-    if (options?.interrupt) cancelCoachSpeech();
-    const utterance = new SpeechSynthesisUtterance(speech.text);
-    const voiceURI = options?.voiceURI ?? activeCoachRef.current?.voiceURI ?? '';
-    const liveVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
-    const selectedVoice = liveVoices.find((voice) => voice.voiceURI === voiceURI);
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.lang = selectedVoice?.lang ?? speechLanguageForLocale(locale);
-    utterance.rate = speech.rate;
-    utterance.pitch = speech.pitch;
-    utterance.volume = settings.volume;
-    window.speechSynthesis.speak(utterance);
-    return utterance;
-  }, [availableVoices, cancelCoachSpeech, locale, settings.voiceEnabled, settings.volume]);
-
-  useEffect(() => {
-    activeCoachRef.current = null;
-    cancelCoachSpeech();
-  }, [cancelCoachSpeech, locale]);
-
-  const speakCoachAfterPause = useCallback((
-    precedingUtterance: SpeechSynthesisUtterance | undefined,
-    speech: CoachSpeech,
-  ) => {
-    if (!precedingUtterance) return;
-    const generation = coachSpeechGenerationRef.current;
-    precedingUtterance.addEventListener('end', () => {
-      if (coachSpeechGenerationRef.current !== generation) return;
-      pendingCoachSpeechTimeoutRef.current = window.setTimeout(() => {
-        pendingCoachSpeechTimeoutRef.current = null;
-        if (coachSpeechGenerationRef.current === generation) speakCoach(speech);
-      }, RECOVERY_SPEECH_PAUSE_MS);
-    }, { once: true });
-  }, [speakCoach]);
-
-  const contextForPhase = useCallback((phase: WorkoutPhase, index: number, phaseRemaining = phase.duration) => (
-    deriveCoachContext({
-      phase,
-      phaseIndex: index,
-      sequence,
-      remainingInPhase: phaseRemaining,
-      totalRounds: activeTimer.rounds,
-      totalCycles: activeTimer.cycles,
-    })
-  ), [activeTimer.cycles, activeTimer.rounds, sequence]);
-
-  const announcePhase = useCallback((phase: WorkoutPhase, index: number) => {
-    const personality = activeCoachRef.current?.personality
-      ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-    return speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale), { interrupt: true });
-  }, [contextForPhase, locale, settings.coachPersonality, speakCoach]);
-
   const resolveWorkoutCoach = useCallback(() => {
-    if (activeCoachRef.current) return activeCoachRef.current;
-    const liveVoices = availableVoices.length > 0
-      ? availableVoices
-      : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
-    const personality = resolveCoachPersonality(settings.coachPersonality);
+    const liveVoices = getSpeechController()?.getVoices()
+      ?? (availableVoices.length > 0
+        ? availableVoices
+        : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []));
+    const currentCoach = activeCoachRef.current;
+    if (currentCoach
+      && (liveVoices.length === 0
+        || (currentCoach.voiceURI
+          && liveVoices.some((voice) => voice.voiceURI === currentCoach.voiceURI)))) {
+      return currentCoach;
+    }
+
+    const personality = currentCoach?.personality
+      ?? resolveCoachPersonality(settings.coachPersonality);
     const coach = resolveActiveCoach({
       voices: liveVoices,
       personality,
@@ -864,7 +888,90 @@ export default function Home() {
       setSettings((current) => ({ ...current, lastAutomaticVoiceURI: coach.voiceURI }));
     }
     return coach;
-  }, [availableVoices, locale, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
+  }, [availableVoices, getSpeechController, locale, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
+
+  const cancelCoachSpeech = useCallback(() => {
+    coachSpeechGenerationRef.current += 1;
+    if (pendingCoachSpeechTimeoutRef.current !== null) {
+      window.clearTimeout(pendingCoachSpeechTimeoutRef.current);
+      pendingCoachSpeechTimeoutRef.current = null;
+    }
+    speechControllerRef.current?.cancel();
+  }, []);
+
+  const speakCoach = useCallback((
+    speech: CoachSpeech,
+    options?: { interrupt?: boolean; voiceURI?: string; onEnd?: () => void },
+  ) => {
+    const controller = getSpeechController();
+    if (!settings.voiceEnabled || !controller || document.visibilityState !== 'visible') return null;
+    if (options?.interrupt) {
+      coachSpeechGenerationRef.current += 1;
+      if (pendingCoachSpeechTimeoutRef.current !== null) {
+        window.clearTimeout(pendingCoachSpeechTimeoutRef.current);
+        pendingCoachSpeechTimeoutRef.current = null;
+      }
+    }
+    const voiceURI = options?.voiceURI ?? resolveWorkoutCoach().voiceURI;
+    return controller.speak({
+      text: speech.text,
+      locale: speechLanguageForLocale(locale),
+      preferredVoiceURI: voiceURI,
+      rate: speech.rate,
+      pitch: speech.pitch,
+      volume: settings.volume,
+      interrupt: options?.interrupt,
+      retry: true,
+      onStart: (_event, context) => {
+        if (options?.voiceURI !== undefined || !context.voice) return;
+        const selectedVoiceURI = context.voice.voiceURI;
+        const currentCoach = activeCoachRef.current;
+        if (!currentCoach || currentCoach.voiceURI) return;
+        activeCoachRef.current = { ...currentCoach, voiceURI: selectedVoiceURI };
+        if (!settings.voiceURI && selectedVoiceURI !== settings.lastAutomaticVoiceURI) {
+          setSettings((current) => ({ ...current, lastAutomaticVoiceURI: selectedVoiceURI }));
+        }
+      },
+      onEnd: options?.onEnd,
+    });
+  }, [getSpeechController, locale, resolveWorkoutCoach, settings.lastAutomaticVoiceURI, settings.voiceEnabled, settings.voiceURI, settings.volume]);
+
+  useEffect(() => {
+    activeCoachRef.current = null;
+    cancelCoachSpeech();
+  }, [cancelCoachSpeech, locale]);
+
+  const scheduleCoachSpeechAfterPause = useCallback((speech: CoachSpeech) => {
+    const generation = coachSpeechGenerationRef.current;
+    if (coachSpeechGenerationRef.current !== generation) return;
+    pendingCoachSpeechTimeoutRef.current = window.setTimeout(() => {
+      pendingCoachSpeechTimeoutRef.current = null;
+      if (coachSpeechGenerationRef.current === generation) speakCoach(speech);
+    }, RECOVERY_SPEECH_PAUSE_MS);
+  }, [speakCoach]);
+
+  const contextForPhase = useCallback((phase: WorkoutPhase, index: number, phaseRemaining = phase.duration) => (
+    deriveCoachContext({
+      phase,
+      phaseIndex: index,
+      sequence,
+      remainingInPhase: phaseRemaining,
+      totalRounds: activeTimer.rounds,
+      totalCycles: activeTimer.cycles,
+    })
+  ), [activeTimer.cycles, activeTimer.rounds, sequence]);
+
+  const announcePhase = useCallback((phase: WorkoutPhase, index: number, followUp?: CoachSpeech) => {
+    const personality = activeCoachRef.current?.personality
+      ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+    return speakCoach(
+      selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale),
+      {
+        interrupt: true,
+        onEnd: followUp ? () => scheduleCoachSpeechAfterPause(followUp) : undefined,
+      },
+    );
+  }, [contextForPhase, locale, scheduleCoachSpeechAfterPause, settings.coachPersonality, speakCoach]);
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
@@ -906,39 +1013,91 @@ export default function Home() {
     return () => document.removeEventListener('visibilitychange', restoreWakeLock);
   }, [requestWakeLock]);
 
-  useEffect(() => {
-    const resynchronizeAudio = () => {
-      if (!runningRef.current) return;
-      if (document.visibilityState !== 'visible') {
-        stopWorkoutAudio();
+  const recoverWorkoutAudio = useCallback((forceRecreate = false) => {
+    if (audioRecoveryPromiseRef.current && !forceRecreate) return audioRecoveryPromiseRef.current;
+    if (!runningRef.current || document.visibilityState !== 'visible') return Promise.resolve();
+    const soundRequested = settingsRef.current.soundEnabled && settingsRef.current.volume > 0;
+    if (!soundRequested) {
+      setAudioNeedsGesture(false);
+    }
+
+    const timeline = workoutTimelineRef.current;
+    const runGeneration = workoutRunGenerationRef.current;
+    if (!timeline) return Promise.resolve();
+    stopWorkoutAudio();
+
+    const recovery = (async () => {
+      const context = soundRequested ? await ensureAudio(forceRecreate) : null;
+      if (document.visibilityState !== 'visible'
+        || !runningRef.current
+        || workoutRunGenerationRef.current !== runGeneration
+        || workoutTimelineRef.current !== timeline) return;
+      if (suppressWorkoutCuesRef.current) {
+        const snapshot = timeline.snapshot(performance.now());
+        phaseIndexRef.current = snapshot.phaseIndex;
+        lastTickSecondRef.current = snapshot.remainingSeconds;
+        setPhaseIndex(snapshot.phaseIndex);
+        setRemaining(snapshot.remainingSeconds);
+        if (snapshot.finished) return;
+      }
+      if (!context) {
+        suppressWorkoutCuesRef.current = false;
         return;
       }
+      const leadSeconds = AUDIO_START_LEAD_SECONDS;
+      const futureMonotonicTime = performance.now() + leadSeconds * 1000;
+      const anchorElapsedMs = timeline.elapsedAt(futureMonotonicTime);
+      if (anchorElapsedMs >= timeline.totalMs) return;
+      startWorkoutAudio(
+        timeline,
+        context,
+        anchorElapsedMs,
+        context.currentTime + leadSeconds,
+        false,
+      );
+      suppressWorkoutCuesRef.current = false;
+    })();
+    audioRecoveryPromiseRef.current = recovery;
+    void recovery.finally(() => {
+      if (audioRecoveryPromiseRef.current === recovery) audioRecoveryPromiseRef.current = null;
+    });
+    return recovery;
+  }, [ensureAudio, startWorkoutAudio, stopWorkoutAudio]);
 
-      const timeline = workoutTimelineRef.current;
-      const runGeneration = workoutRunGenerationRef.current;
-      if (!timeline) return;
-      void ensureAudio().then((context) => {
-        if (!context
-          || !runningRef.current
-          || workoutRunGenerationRef.current !== runGeneration
-          || workoutTimelineRef.current !== timeline) return;
-        const leadSeconds = AUDIO_START_LEAD_SECONDS;
-        const futureMonotonicTime = performance.now() + leadSeconds * 1000;
-        const anchorElapsedMs = timeline.elapsedAt(futureMonotonicTime);
-        if (anchorElapsedMs >= timeline.totalMs) return;
-        startWorkoutAudio(
-          timeline,
-          context,
-          anchorElapsedMs,
-          context.currentTime + leadSeconds,
-          false,
-        );
-      });
+  useEffect(() => {
+    const suspendMediaLifecycle = () => {
+      mediaWasHiddenRef.current = true;
+      suppressWorkoutCuesRef.current = true;
+      invalidatePendingWorkoutStart();
+      stopWorkoutAudio();
+      cancelCoachSpeech();
+      speechControllerRef.current?.setVisible(false);
+      invalidateAudioRecovery();
+    };
+    const synchronizeMediaLifecycle = () => {
+      if (document.visibilityState !== 'visible') {
+        suspendMediaLifecycle();
+        return;
+      }
+      getSpeechController()?.setVisible(true);
+      if (runningRef.current) {
+        const forceRecreate = mediaWasHiddenRef.current;
+        mediaWasHiddenRef.current = false;
+        void recoverWorkoutAudio(forceRecreate);
+      }
     };
 
-    document.addEventListener('visibilitychange', resynchronizeAudio);
-    return () => document.removeEventListener('visibilitychange', resynchronizeAudio);
-  }, [ensureAudio, startWorkoutAudio, stopWorkoutAudio]);
+    document.addEventListener('visibilitychange', synchronizeMediaLifecycle);
+    window.addEventListener('pagehide', suspendMediaLifecycle);
+    window.addEventListener('pageshow', synchronizeMediaLifecycle);
+    window.addEventListener('focus', synchronizeMediaLifecycle);
+    return () => {
+      document.removeEventListener('visibilitychange', synchronizeMediaLifecycle);
+      window.removeEventListener('pagehide', suspendMediaLifecycle);
+      window.removeEventListener('pageshow', synchronizeMediaLifecycle);
+      window.removeEventListener('focus', synchronizeMediaLifecycle);
+    };
+  }, [cancelCoachSpeech, getSpeechController, invalidateAudioRecovery, invalidatePendingWorkoutStart, recoverWorkoutAudio, stopWorkoutAudio]);
 
   const applyOrientation = useCallback(async (allowRotation: boolean) => {
     try {
@@ -1018,12 +1177,15 @@ export default function Home() {
     setRunning(false);
     setFinished(true);
     setRemaining(0);
-    if (!completionWasScheduled) void playCue('complete');
-    const personality = activeCoachRef.current?.personality
-      ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-    const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[sequence.length - 1]?.kind === 'cooldown';
-    speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
+    if (document.visibilityState === 'visible' && !suppressWorkoutCuesRef.current) {
+      if (!completionWasScheduled) void playCue('complete');
+      const personality = activeCoachRef.current?.personality
+        ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+      const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[sequence.length - 1]?.kind === 'cooldown';
+      speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
+    }
     releaseWakeLock();
+    suppressWorkoutCuesRef.current = false;
     transitionLockRef.current = false;
   }, [locale, playCue, recordCompletedWorkout, releaseWakeLock, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, stopWorkoutAudio]);
 
@@ -1036,21 +1198,23 @@ export default function Home() {
     setPhaseIndex(nextIndex);
     setRemaining(nextRemaining);
     lastTickSecondRef.current = nextRemaining;
+    const messageSelection = selectRunnerMessage(upcoming, nextIndex);
+    if (document.visibilityState !== 'visible' || suppressWorkoutCuesRef.current) {
+      transitionLockRef.current = false;
+      return;
+    }
     if (!workoutAudioSchedulerRef.current?.hasScheduled(`phase-${nextIndex}`)) {
       void playCue(upcoming.kind);
     }
-    const messageSelection = selectRunnerMessage(upcoming, nextIndex);
-    const phaseUtterance = announcePhase(upcoming, nextIndex);
+    let followUp: CoachSpeech | undefined;
     if (settings.coachPhrasesEnabled && messageSelection) {
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-      speakCoachAfterPause(
-        phaseUtterance,
-        makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message),
-      );
+      followUp = makeDisplayMessageSpeech(personality, messageSelection.kind, messageSelection.message);
     }
+    announcePhase(upcoming, nextIndex, followUp);
     transitionLockRef.current = false;
-  }, [announcePhase, playCue, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoachAfterPause]);
+  }, [announcePhase, playCue, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled]);
 
   useEffect(() => {
     if (!running) return;
@@ -1073,6 +1237,7 @@ export default function Home() {
       if (nextRemaining !== lastTickSecondRef.current) {
         lastTickSecondRef.current = nextRemaining;
         setRemaining(nextRemaining);
+        if (document.visibilityState !== 'visible' || suppressWorkoutCuesRef.current) return;
         const timelinePhase = sequence[snapshot.phaseIndex];
         if ((timelinePhase.kind === 'prepare' || timelinePhase.kind === 'work' || timelinePhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
           const personality = activeCoachRef.current?.personality
@@ -1098,6 +1263,11 @@ export default function Home() {
 
   useEffect(() => () => {
     stopWorkoutAudio();
+    audioEngineRef.current?.dispose();
+    audioEngineRef.current = null;
+    audioEnsurePromiseRef.current = null;
+    audioRecoveryPromiseRef.current = null;
+    audioRestorePromiseRef.current = null;
     releaseWakeLock();
     cancelCoachSpeech();
   }, [cancelCoachSpeech, releaseWakeLock, stopWorkoutAudio]);
@@ -1116,7 +1286,7 @@ export default function Home() {
   }, [stopWorkoutAudio]);
 
   const openAdjustSessionDialog = () => {
-    if (hasWorkoutStarted || finished) return;
+    if (workoutStartPendingRef.current || hasWorkoutStarted || finished) return;
     setSessionAdjustment({ rounds: activeTimer.rounds, cycles: activeTimer.cycles });
     window.requestAnimationFrame(() => {
       if (!adjustSessionDialogRef.current?.open) adjustSessionDialogRef.current?.showModal();
@@ -1124,7 +1294,7 @@ export default function Home() {
   };
 
   const applySessionAdjustment = () => {
-    if (hasWorkoutStarted || finished) return;
+    if (workoutStartPendingRef.current || hasWorkoutStarted || finished) return;
     const adjustedTimer: TimerConfig = {
       ...activeTimer,
       rounds: Math.min(99, Math.max(1, Math.round(sessionAdjustment.rounds))),
@@ -1132,6 +1302,7 @@ export default function Home() {
     };
     if (adjustedTimer.nameIsCustom === false) adjustedTimer.name = generatedTimerName(adjustedTimer);
     const adjustedSequence = buildSequence(adjustedTimer);
+    suppressWorkoutCuesRef.current = false;
     stopWorkoutAudio();
     workoutTimelineRef.current = new WorkoutTimeline(adjustedSequence);
     sequenceRef.current = adjustedSequence;
@@ -1222,7 +1393,11 @@ export default function Home() {
   const beginWorkout = (timer: TimerConfig) => {
     const normalizedTimer = normalizeTimerValues(timer);
     const firstSequence = buildSequence(normalizedTimer);
+    suppressWorkoutCuesRef.current = false;
+    invalidatePendingWorkoutStart();
+    invalidateAudioRecovery();
     stopWorkoutAudio();
+    cancelCoachSpeech();
     workoutTimelineRef.current = new WorkoutTimeline(firstSequence);
     sequenceRef.current = firstSequence;
     phaseIndexRef.current = 0;
@@ -1251,8 +1426,13 @@ export default function Home() {
   };
 
   const toggleWorkout = async () => {
+    if (workoutStartPendingRef.current) return;
     if (finished) {
+      suppressWorkoutCuesRef.current = false;
+      invalidatePendingWorkoutStart();
+      invalidateAudioRecovery();
       stopWorkoutAudio();
+      cancelCoachSpeech();
       workoutTimelineRef.current = new WorkoutTimeline(sequence);
       workoutRunGenerationRef.current += 1;
       finishIntentRef.current = false;
@@ -1273,7 +1453,7 @@ export default function Home() {
       return;
     }
 
-    if (running) {
+    if (runningRef.current) {
       workoutRunGenerationRef.current += 1;
       const snapshot = pauseWorkoutTiming();
       if (snapshot?.finished) {
@@ -1284,58 +1464,94 @@ export default function Home() {
       cancelCoachSpeech();
       releaseWakeLock();
     } else {
+      if (document.visibilityState !== 'visible') return;
       const isResuming = hasWorkoutStarted;
       const runGeneration = workoutRunGenerationRef.current + 1;
+      const startToken = workoutStartTokenRef.current + 1;
+      workoutStartTokenRef.current = startToken;
+      workoutStartPendingRef.current = true;
+      setWorkoutStartPending(true);
       workoutRunGenerationRef.current = runGeneration;
       finishIntentRef.current = false;
-      setHasWorkoutStarted(true);
-      const audioContext = await ensureAudio();
-      if (workoutRunGenerationRef.current !== runGeneration || finishIntentRef.current) return;
-      if (!workoutStartedAtRef.current) {
-        workoutStartedAtRef.current = new Date().toISOString();
-      }
+      getSpeechController()?.setVisible(true);
       resolveWorkoutCoach();
       const timeline = workoutTimelineRef.current ?? new WorkoutTimeline(sequence);
       workoutTimelineRef.current = timeline;
       const pausedSnapshot = timeline.snapshot(performance.now());
-      phaseIndexRef.current = pausedSnapshot.phaseIndex;
-      lastTickSecondRef.current = pausedSnapshot.remainingSeconds;
-      setPhaseIndex(pausedSnapshot.phaseIndex);
-      setRemaining(pausedSnapshot.remainingSeconds);
-      const leadSeconds = audioContext ? AUDIO_START_LEAD_SECONDS : 0;
-      const monotonicStartMs = performance.now() + leadSeconds * 1000;
-      timeline.start(monotonicStartMs);
-      const scheduler = audioContext
-        ? startWorkoutAudio(
-          timeline,
-          audioContext,
-          pausedSnapshot.elapsedMs,
-          audioContext.currentTime + leadSeconds,
-          !isResuming,
-        )
-        : null;
-      runningRef.current = true;
-      setRunning(true);
       const resumedPhase = sequence[pausedSnapshot.phaseIndex];
-      if (resumedPhase && !isResuming) {
-        if (!scheduler?.hasScheduled(`current-phase-${pausedSnapshot.phaseIndex}`)) {
+      let followUp: CoachSpeech | undefined;
+      if (settings.coachPhrasesEnabled
+        && runnerMessageSelection?.phaseIndex === pausedSnapshot.phaseIndex) {
+        const personality = activeCoachRef.current?.personality
+          ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+        followUp = makeDisplayMessageSpeech(
+          personality,
+          runnerMessageSelection.kind,
+          runnerMessageSelection.message,
+        );
+      }
+
+      invalidateAudioRecovery();
+      const soundRequested = settingsRef.current.soundEnabled && settingsRef.current.volume > 0;
+      const forceRecreate = mediaWasHiddenRef.current;
+      mediaWasHiddenRef.current = false;
+      if (!soundRequested) setAudioNeedsGesture(false);
+      const audioRecovery = soundRequested
+        ? ensureAudio(forceRecreate)
+        : Promise.resolve<AudioContext | null>(null);
+      const initialSpeech = resumedPhase && !isResuming
+        ? announcePhase(resumedPhase, pausedSnapshot.phaseIndex, followUp)
+        : null;
+
+      try {
+        const audioContext = await audioRecovery;
+        if (workoutStartTokenRef.current !== startToken
+          || workoutRunGenerationRef.current !== runGeneration
+          || finishIntentRef.current
+          || document.visibilityState !== 'visible') {
+          initialSpeech?.cancel();
+          return;
+        }
+        if (!workoutStartedAtRef.current) {
+          workoutStartedAtRef.current = new Date().toISOString();
+        }
+        phaseIndexRef.current = pausedSnapshot.phaseIndex;
+        lastTickSecondRef.current = pausedSnapshot.remainingSeconds;
+        setPhaseIndex(pausedSnapshot.phaseIndex);
+        setRemaining(pausedSnapshot.remainingSeconds);
+        const leadSeconds = audioContext ? AUDIO_START_LEAD_SECONDS : 0;
+        const monotonicStartMs = performance.now() + leadSeconds * 1000;
+        suppressWorkoutCuesRef.current = false;
+        timeline.start(monotonicStartMs);
+        const scheduler = audioContext
+          ? startWorkoutAudio(
+            timeline,
+            audioContext,
+            pausedSnapshot.elapsedMs,
+            audioContext.currentTime + leadSeconds,
+            !isResuming,
+          )
+          : null;
+        runningRef.current = true;
+        setRunning(true);
+        setHasWorkoutStarted(true);
+        if (resumedPhase && !isResuming && audioContext && !scheduler?.hasScheduled(`current-phase-${pausedSnapshot.phaseIndex}`)) {
           void playCue(resumedPhase.kind);
         }
-        const phaseUtterance = announcePhase(resumedPhase, pausedSnapshot.phaseIndex);
-        if (settings.coachPhrasesEnabled && runnerMessageSelection?.phaseIndex === pausedSnapshot.phaseIndex) {
-          const personality = activeCoachRef.current?.personality
-            ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-          speakCoachAfterPause(
-            phaseUtterance,
-            makeDisplayMessageSpeech(personality, runnerMessageSelection.kind, runnerMessageSelection.message),
-          );
+        keepScreenAwake();
+      } finally {
+        if (workoutStartTokenRef.current === startToken) {
+          workoutStartPendingRef.current = false;
+          setWorkoutStartPending(false);
         }
       }
-      keepScreenAwake();
     }
   };
 
   const resetWorkout = () => {
+    suppressWorkoutCuesRef.current = false;
+    invalidatePendingWorkoutStart();
+    invalidateAudioRecovery();
     stopWorkoutAudio();
     workoutTimelineRef.current = new WorkoutTimeline(sequence);
     workoutRunGenerationRef.current += 1;
@@ -1363,6 +1579,9 @@ export default function Home() {
   };
 
   const exitWorkout = () => {
+    suppressWorkoutCuesRef.current = false;
+    invalidatePendingWorkoutStart();
+    invalidateAudioRecovery();
     stopWorkoutAudio();
     workoutTimelineRef.current = null;
     workoutRunGenerationRef.current += 1;
@@ -1412,7 +1631,7 @@ export default function Home() {
     resumeAfterFinishDialogRef.current = false;
     finishIntentRef.current = false;
     finishSessionDialogRef.current?.close();
-    if (shouldResume) window.requestAnimationFrame(() => { void toggleWorkout(); });
+    if (shouldResume) void toggleWorkout();
   };
 
   const saveStoppedWorkout = () => {
@@ -1439,6 +1658,9 @@ export default function Home() {
     );
 
     transitionLockRef.current = true;
+    suppressWorkoutCuesRef.current = false;
+    invalidatePendingWorkoutStart();
+    invalidateAudioRecovery();
     stopWorkoutAudio();
     workoutTimelineRef.current = null;
     workoutRunGenerationRef.current += 1;
@@ -1558,9 +1780,10 @@ export default function Home() {
   };
 
   const previewCoach = () => {
-    const liveVoices = availableVoices.length > 0
-      ? availableVoices
-      : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+    const liveVoices = getSpeechController()?.getVoices()
+      ?? (availableVoices.length > 0
+        ? availableVoices
+        : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []));
     const personality = resolveCoachPersonality(settings.coachPersonality);
     const preview = resolveActiveCoach({
       voices: liveVoices,
@@ -1572,6 +1795,21 @@ export default function Home() {
       random: () => 0,
     });
     speakCoach(makePreviewSpeech(personality, locale), { interrupt: true, voiceURI: preview.voiceURI });
+  };
+
+  const restoreWorkoutAudio = () => {
+    if (audioRestorePromiseRef.current) return;
+    audioEngineRef.current?.stopRecovery();
+    audioEnsurePromiseRef.current = null;
+    audioRecoveryPromiseRef.current = null;
+    const recovery = recoverWorkoutAudio(true);
+    audioRestorePromiseRef.current = recovery;
+    setAudioRestorePending(true);
+    void recovery.finally(() => {
+      if (audioRestorePromiseRef.current !== recovery) return;
+      audioRestorePromiseRef.current = null;
+      setAudioRestorePending(false);
+    });
   };
 
   const totalRemaining = finished
@@ -2036,11 +2274,26 @@ export default function Home() {
         <section className="runner-controls">
           <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>{copy.runner.round} / {activeTimer.rounds}</span></div>
           <div className="runner-control-center">
-            <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? copy.runner.restartWorkout : running ? copy.runner.pauseWorkout : hasWorkoutStarted ? copy.runner.resume : copy.runner.startWorkout}>
+            <button
+              className={`main-control ${running ? 'is-running' : ''}`}
+              disabled={workoutStartPending}
+              aria-busy={workoutStartPending}
+              onClick={() => { void toggleWorkout(); }}
+              aria-label={finished ? copy.runner.restartWorkout : running ? copy.runner.pauseWorkout : hasWorkoutStarted ? copy.runner.resume : copy.runner.startWorkout}
+            >
               <span>{finished ? <AppIcon name="reset" size={34} /> : running ? <PauseGlyph /> : <PlayGlyph />}</span>
               <small>{finished ? copy.runner.again : running ? copy.runner.pause : hasWorkoutStarted ? copy.runner.resume : copy.runner.start}</small>
             </button>
-            {!finished && !hasWorkoutStarted && (
+            {!finished && running && audioNeedsGesture && (
+              <button
+                className="runner-secondary-action audio-recovery"
+                disabled={audioRestorePending}
+                aria-busy={audioRestorePending}
+                title={copy.runner.restoreAudioHint}
+                onClick={restoreWorkoutAudio}
+              >{copy.runner.restoreAudio}</button>
+            )}
+            {!finished && !running && !hasWorkoutStarted && !workoutStartPending && (
               <button className="runner-secondary-action" onClick={openAdjustSessionDialog}>{copy.runner.adjustSession}</button>
             )}
             {!finished && hasWorkoutStarted && !running && (

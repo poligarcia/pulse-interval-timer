@@ -177,6 +177,8 @@ export type AppMessages = {
     pause: string;
     start: string;
     resume: string;
+    restoreAudio: string;
+    restoreAudioHint: string;
   };
   coachSettings: {
     kicker: string;
@@ -386,6 +388,7 @@ const en: AppMessages = {
     workoutProgress: (round, rounds, cycle, cycles) => `Workout progress. Round ${round} of ${rounds}, cycle ${cycle} of ${cycles}.`,
     round: 'Round', cycle: 'Cycle', restartWorkout: 'Restart workout', pauseWorkout: 'Pause workout',
     startWorkout: 'Start workout', again: 'Again', pause: 'Pause', start: 'Start', resume: 'Resume',
+    restoreAudio: 'Restore audio', restoreAudioHint: 'Tap to reconnect workout sound.',
   },
   coachSettings: {
     kicker: 'COACH VOICE', voiceCoach: 'Voice coach', voiceCoachHelper: 'Phase cues and a spoken 3–2–1',
@@ -563,6 +566,7 @@ const esAR: AppMessages = {
     workoutProgress: (round, rounds, cycle, cycles) => `Progreso del entrenamiento. Ronda ${round} de ${rounds}, ciclo ${cycle} de ${cycles}.`,
     round: 'Ronda', cycle: 'Ciclo', restartWorkout: 'Reiniciar entrenamiento', pauseWorkout: 'Pausar entrenamiento',
     startWorkout: 'Iniciar entrenamiento', again: 'De nuevo', pause: 'Pausar', start: 'Empezar', resume: 'Continuar',
+    restoreAudio: 'Recuperar audio', restoreAudioHint: 'Tocá para reconectar el sonido del entrenamiento.',
   },
   coachSettings: {
     kicker: 'VOZ DEL COACH', voiceCoach: 'Coach por voz', voiceCoachHelper: 'Indicaciones de fase y cuenta regresiva 3–2–1',
@@ -740,6 +744,7 @@ const ptBR: AppMessages = {
     workoutProgress: (round, rounds, cycle, cycles) => `Progresso do treino. Rodada ${round} de ${rounds}, ciclo ${cycle} de ${cycles}.`,
     round: 'Rodada', cycle: 'Ciclo', restartWorkout: 'Reiniciar treino', pauseWorkout: 'Pausar treino',
     startWorkout: 'Iniciar treino', again: 'De novo', pause: 'Pausar', start: 'Iniciar', resume: 'Continuar',
+    restoreAudio: 'Restaurar áudio', restoreAudioHint: 'Toque para reconectar o som do treino.',
   },
   coachSettings: {
     kicker: 'VOZ DO COACH', voiceCoach: 'Coach por voz', voiceCoachHelper: 'Avisos de fase e contagem regressiva 3–2–1',
