@@ -1,3 +1,4 @@
+import type { Locale } from '../i18n/locales.ts';
 import type {
   ActiveCoach,
   CoachPersonalityId,
@@ -34,6 +35,18 @@ const RECOMMENDED_VOICE_PROFILES: VoiceProfile[] = [
   { name: 'Google US English', recommended: true },
   { name: 'Google UK English Female', gender: 'female', recommended: true },
   { name: 'Google UK English Male', gender: 'male', recommended: true },
+  { name: 'Mónica', gender: 'female', recommended: true },
+  { name: 'Paulina', gender: 'female', recommended: true },
+  { name: 'Soledad', gender: 'female', recommended: true },
+  { name: 'Jorge', gender: 'male', recommended: true },
+  { name: 'Juan', gender: 'male', recommended: true },
+  { name: 'Diego', gender: 'male', recommended: true },
+  { name: 'Luciana', gender: 'female', recommended: true },
+  { name: 'Joana', gender: 'female', recommended: true },
+  { name: 'Francisca', gender: 'female', recommended: true },
+  { name: 'Felipe', gender: 'male', recommended: true },
+  { name: 'Joaquim', gender: 'male', recommended: true },
+  { name: 'Antônio', gender: 'male', recommended: true },
 ];
 
 const NOVELTY_VOICE_NAMES = [
@@ -68,9 +81,18 @@ export type CuratedVoice<T extends SystemVoiceLike = SystemVoiceLike> = {
   profile: VoiceProfile;
 };
 
-export function curateVoices<T extends SystemVoiceLike>(voices: T[]): CuratedVoice<T>[] {
+export function speechLanguageForLocale(locale: Locale) {
+  return locale === 'en' ? 'en-US' : locale;
+}
+
+function voiceLanguageFamily(locale: Locale) {
+  return speechLanguageForLocale(locale).split('-')[0].toLocaleLowerCase();
+}
+
+export function curateVoices<T extends SystemVoiceLike>(voices: T[], locale: Locale = 'en'): CuratedVoice<T>[] {
+  const family = voiceLanguageFamily(locale);
   return voices
-    .filter((voice) => voice.lang.toLocaleLowerCase().startsWith('en'))
+    .filter((voice) => voice.lang.toLocaleLowerCase().split('-')[0] === family)
     .map((voice) => ({ voice, profile: classifyVoice(voice) }));
 }
 
@@ -80,6 +102,7 @@ type ActiveCoachInput<T extends SystemVoiceLike> = {
   preference: VoicePreference;
   selectedVoiceURI: string;
   previousAutomaticVoiceURI?: string;
+  locale?: Locale;
   random?: () => number;
 };
 
@@ -93,9 +116,10 @@ export function resolveActiveCoach<T extends SystemVoiceLike>({
   preference,
   selectedVoiceURI,
   previousAutomaticVoiceURI,
+  locale = 'en',
   random = Math.random,
 }: ActiveCoachInput<T>): ActiveCoach {
-  const curated = curateVoices(voices);
+  const curated = curateVoices(voices, locale);
   const manualVoice = curated.find(({ voice }) => voice.voiceURI === selectedVoiceURI);
   if (selectedVoiceURI && manualVoice) return { personality, voiceURI: manualVoice.voice.voiceURI };
 

@@ -1,3 +1,5 @@
+import type { Locale } from '../i18n/locales.ts';
+import { localizeCoachPhraseText } from './localization.ts';
 import { COACH_PERSONALITIES, makeCoachSpeech } from './personalities.ts';
 import type {
   CoachContext,
@@ -79,8 +81,9 @@ export function planCoachIntervention(
   personalityId: CoachPersonalityId,
   context: CoachContext,
   memory: CoachMemory,
-  random: () => number = Math.random,
+  options: { random?: () => number; locale?: Locale } = {},
 ): InterventionPlan {
+  const { random = Math.random, locale = 'en' } = options;
   if (!isInterventionWindow(context)) return { memory };
 
   const phaseKey = `${context.phaseIndex}:${context.phase}`;
@@ -105,7 +108,7 @@ export function planCoachIntervention(
   const speech = makeCoachSpeech(
     personalityId,
     phrase.id,
-    phrase.text,
+    localizeCoachPhraseText(phrase.id, phrase.text, locale),
     'contextual',
     phrase.intent,
     phrase.rateOffset,

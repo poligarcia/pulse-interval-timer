@@ -122,7 +122,7 @@ test('tracks milestone progress from durable workout history', () => {
     ['two-goal-weeks', true],
     ['five-hours', false],
   ]);
-  assert.equal(milestones.find(({ id }) => id === 'five-hours')?.progressLabel, '1.7 / 5 hours');
+  assert.equal(milestones.find(({ id }) => id === 'five-hours')?.progress.toFixed(1), '1.7');
 });
 
 test('builds chart buckets and reverse-chronological history groups', () => {
@@ -138,4 +138,14 @@ test('builds chart buckets and reverse-chronological history groups', () => {
   assert.equal(buckets.at(-1)?.totalSeconds, 600);
   assert.deepEqual(history.map(({ key }) => key), ['2026-08', '2026-07']);
   assert.deepEqual(history[0].days.map(({ key }) => key), ['2026-08-30', '2026-08-29']);
+});
+
+test('formats chart and history dates with an explicit product locale', () => {
+  const sessions = [session('2026-08-30', 'aug-30')];
+  const now = new Date(2026, 7, 30, 12);
+  const spanishBuckets = progressBuckets(sessions, 'month', now, 'es-AR');
+  const portugueseHistory = groupWorkoutHistory(sessions, 'pt-BR');
+
+  assert.match(spanishBuckets.at(-1)?.label ?? '', /ago/i);
+  assert.match(portugueseHistory[0]?.label ?? '', /agosto/i);
 });

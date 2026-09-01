@@ -1,14 +1,20 @@
-import type { ReminderDay, ReminderDayOption } from './types.ts';
+import type { ReminderDay, ReminderDayOption, WorkoutReminderCalendarCopy } from './types.ts';
 
 export const REMINDER_DAY_OPTIONS: ReminderDayOption[] = [
-  { value: 1, label: 'Monday', shortLabel: 'M', calendarCode: 'MO' },
-  { value: 2, label: 'Tuesday', shortLabel: 'T', calendarCode: 'TU' },
-  { value: 3, label: 'Wednesday', shortLabel: 'W', calendarCode: 'WE' },
-  { value: 4, label: 'Thursday', shortLabel: 'T', calendarCode: 'TH' },
-  { value: 5, label: 'Friday', shortLabel: 'F', calendarCode: 'FR' },
-  { value: 6, label: 'Saturday', shortLabel: 'S', calendarCode: 'SA' },
-  { value: 0, label: 'Sunday', shortLabel: 'S', calendarCode: 'SU' },
+  { value: 1, calendarCode: 'MO' },
+  { value: 2, calendarCode: 'TU' },
+  { value: 3, calendarCode: 'WE' },
+  { value: 4, calendarCode: 'TH' },
+  { value: 5, calendarCode: 'FR' },
+  { value: 6, calendarCode: 'SA' },
+  { value: 0, calendarCode: 'SU' },
 ];
+
+const DEFAULT_CALENDAR_COPY: WorkoutReminderCalendarCopy = {
+  summary: 'Pulse workout',
+  description: 'Open Pulse and complete a focused interval workout.',
+  alarmDescription: 'Time for your Pulse workout.',
+};
 
 export const DEFAULT_REMINDER_DAYS: ReminderDay[] = [1, 3, 5];
 export const DEFAULT_REMINDER_TIME = '18:00';
@@ -67,6 +73,7 @@ export function createWorkoutReminderCalendar(
   days: ReminderDay[],
   time: string,
   now = new Date(),
+  copy: WorkoutReminderCalendarCopy = DEFAULT_CALENDAR_COPY,
 ) {
   const normalizedDays = normalizeReminderDays(days);
   const start = nextReminderDate(normalizedDays, time, now);
@@ -90,12 +97,12 @@ export function createWorkoutReminderCalendar(
     `DTSTART:${localCalendarDate(start)}`,
     `DTEND:${localCalendarDate(end)}`,
     `RRULE:FREQ=WEEKLY;BYDAY=${byDay}`,
-    'SUMMARY:Pulse workout',
-    'DESCRIPTION:Open Pulse and complete a focused interval workout.',
+    `SUMMARY:${copy.summary}`,
+    `DESCRIPTION:${copy.description}`,
     'BEGIN:VALARM',
     'TRIGGER:PT0M',
     'ACTION:DISPLAY',
-    'DESCRIPTION:Time for your Pulse workout.',
+    `DESCRIPTION:${copy.alarmDescription}`,
     'END:VALARM',
     'END:VEVENT',
     'END:VCALENDAR',
@@ -107,7 +114,8 @@ export function createWorkoutReminderCalendarDataUrl(
   days: ReminderDay[],
   time: string,
   now = new Date(),
+  copy: WorkoutReminderCalendarCopy = DEFAULT_CALENDAR_COPY,
 ) {
-  const calendar = createWorkoutReminderCalendar(days, time, now);
+  const calendar = createWorkoutReminderCalendar(days, time, now, copy);
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`;
 }

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ASPIRATIONAL_MESSAGES, MOTIVATIONAL_MESSAGES } from './display-message-data.ts';
+import { displayMessagesForLocale } from './display-message-locales.ts';
 import { createDisplayMessageMemory, makeDisplayMessageSpeech, selectDisplayMessage } from './display-messages.ts';
 
 test('display messages use the supplied random source', () => {
   const memory = createDisplayMessageMemory();
-  const first = selectDisplayMessage('motivation', memory, () => 0);
-  const last = selectDisplayMessage('motivation', memory, () => 0.999);
+  const first = selectDisplayMessage('motivation', memory, 'en', () => 0);
+  const last = selectDisplayMessage('motivation', memory, 'en', () => 0.999);
 
   assert.notEqual(first.message.id, last.message.id);
 });
@@ -45,7 +46,7 @@ test('motivational messages avoid the twenty most recently shown messages', () =
   const selectedIds: string[] = [];
 
   for (let index = 0; index < 21; index += 1) {
-    const selection = selectDisplayMessage('motivation', memory, () => 0);
+    const selection = selectDisplayMessage('motivation', memory, 'en', () => 0);
     selectedIds.push(selection.message.id);
     memory = selection.memory;
   }
@@ -59,7 +60,7 @@ test('aspirational messages avoid the twelve most recently shown messages', () =
   const selectedIds: string[] = [];
 
   for (let index = 0; index < 13; index += 1) {
-    const selection = selectDisplayMessage('aspiration', memory, () => 0);
+    const selection = selectDisplayMessage('aspiration', memory, 'en', () => 0);
     selectedIds.push(selection.message.id);
     memory = selection.memory;
   }
@@ -78,4 +79,18 @@ test('stored message memory ignores unknown and malformed entries', () => {
     motivation: ['motivation-002'],
     aspiration: [],
   });
+});
+
+test('Spanish and Portuguese use original unattributed Pulse message libraries', () => {
+  for (const locale of ['es-AR', 'pt-BR'] as const) {
+    const messages = displayMessagesForLocale(locale);
+    assert.equal(messages.motivation.length, 24);
+    assert.equal(messages.aspiration.length, 14);
+    assert.ok([...messages.motivation, ...messages.aspiration].every(({ author }) => author === null));
+  }
+
+  const spanish = selectDisplayMessage('motivation', createDisplayMessageMemory(undefined, 'es-AR'), 'es-AR', () => 0);
+  const portuguese = selectDisplayMessage('aspiration', createDisplayMessageMemory(undefined, 'pt-BR'), 'pt-BR', () => 0);
+  assert.match(spanish.message.id, /^es-motivation-/);
+  assert.match(portuguese.message.id, /^pt-aspiration-/);
 });

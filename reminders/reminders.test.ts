@@ -51,3 +51,20 @@ test('creates a text/calendar URL that browsers can open for calendar import', (
   assert.match(calendar, /BEGIN:VCALENDAR\r\n/);
   assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
 });
+
+test('uses localized copy in calendar content while keeping recurrence codes stable', () => {
+  const calendar = createWorkoutReminderCalendar(
+    [1, 3, 5],
+    '18:00',
+    new Date(2026, 7, 30, 12, 0),
+    {
+      summary: 'Entrenamiento Pulse',
+      description: 'Abrí Pulse y completá un entrenamiento por intervalos.',
+      alarmDescription: 'Es hora de tu entrenamiento Pulse.',
+    },
+  );
+
+  assert.match(calendar, /SUMMARY:Entrenamiento Pulse/);
+  assert.match(calendar, /DESCRIPTION:Abrí Pulse y completá/);
+  assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
+});

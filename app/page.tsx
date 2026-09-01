@@ -8,6 +8,7 @@ import {
   createDisplayMessageMemory,
   curateVoices,
   deriveCoachContext,
+  getCoachPersonalityPresentation,
   makeCountdownSpeech,
   makeDisplayMessageSpeech,
   makePreviewSpeech,
@@ -16,6 +17,7 @@ import {
   resolveCoachPersonality,
   selectDisplayMessage,
   selectPhaseSpeech,
+  speechLanguageForLocale,
 } from '@/coach';
 import type {
   ActiveCoach,
@@ -58,6 +60,8 @@ import {
   readLabsSettings,
   writeLabsSettings,
 } from '@/labs/storage';
+import { getMessages, localizeTimerName, LOCALE_OPTIONS, useLocale } from '@/i18n';
+import type { AppMessages } from '@/i18n';
 
 const PulseLabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
 
@@ -93,7 +97,6 @@ type Settings = {
 
 type WorkoutPhase = {
   kind: PhaseKind;
-  label: string;
   duration: number;
   round: number;
   cycle: number;
@@ -120,6 +123,12 @@ type ScreenWakeLock = {
 function generatedTimerName(timer: Pick<TimerConfig, 'work' | 'rest' | 'rounds' | 'cycles'>) {
   const cycles = timer.cycles > 1 ? ` X ${timer.cycles}` : '';
   return `${timer.work}s work - ${timer.rest}s rest X ${timer.rounds}${cycles}`;
+}
+
+function displayWorkoutSessionTimerName(session: WorkoutSession, copy: AppMessages) {
+  return session.timerSnapshot.nameIsCustom === false
+    ? localizeTimerName(session.timerSnapshot, copy)
+    : session.timerName;
 }
 
 function makeDefaultTimer(work: number, rest: number, index: number): TimerConfig {
@@ -203,14 +212,6 @@ function makeEmptyTimer(): TimerConfig {
   return timer;
 }
 
-const PHASE_META: Record<PhaseKind, { label: string; short: string }> = {
-  prepare: { label: 'Prepare', short: 'Get ready' },
-  work: { label: 'Work', short: 'Push' },
-  rest: { label: 'Rest', short: 'Recover' },
-  cycleRest: { label: 'Cycle rest', short: 'Reset' },
-  cooldown: { label: 'Cooldown', short: 'Breathe' },
-};
-
 function formatTime(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(safeSeconds / 60);
@@ -261,24 +262,24 @@ function selectHomeTimers(timers: TimerConfig[], recentTimerIds: string[]) {
 function buildSequence(timer: TimerConfig): WorkoutPhase[] {
   const sequence: WorkoutPhase[] = [];
   if (timer.prepare > 0) {
-    sequence.push({ kind: 'prepare', label: 'Prepare', duration: timer.prepare, round: 1, cycle: 1 });
+    sequence.push({ kind: 'prepare', duration: timer.prepare, round: 1, cycle: 1 });
   }
 
   for (let cycle = 1; cycle <= timer.cycles; cycle += 1) {
     for (let round = 1; round <= timer.rounds; round += 1) {
-      sequence.push({ kind: 'work', label: 'Work', duration: timer.work, round, cycle });
+      sequence.push({ kind: 'work', duration: timer.work, round, cycle });
       if (round < timer.rounds && timer.rest > 0) {
-        sequence.push({ kind: 'rest', label: 'Rest', duration: timer.rest, round, cycle });
+        sequence.push({ kind: 'rest', duration: timer.rest, round, cycle });
       }
     }
 
     if (cycle < timer.cycles && timer.cycleRest > 0) {
-      sequence.push({ kind: 'cycleRest', label: 'Cycle rest', duration: timer.cycleRest, round: timer.rounds, cycle });
+      sequence.push({ kind: 'cycleRest', duration: timer.cycleRest, round: timer.rounds, cycle });
     }
   }
 
   if (timer.cooldown > 0) {
-    sequence.push({ kind: 'cooldown', label: 'Cooldown', duration: timer.cooldown, round: timer.rounds, cycle: timer.cycles });
+    sequence.push({ kind: 'cooldown', duration: timer.cooldown, round: timer.rounds, cycle: timer.cycles });
   }
 
   return sequence;
@@ -367,16 +368,17 @@ function MetricInput({
   );
 }
 
-function TimerDetails({ timer, index }: { timer: TimerConfig; index: number }) {
+function TimerDetails({ timer, index, copy }: { timer: TimerConfig; index: number; copy: AppMessages }) {
+  const timerName = localizeTimerName(timer, copy);
   return (
     <>
       <span className={`timer-number color-${index % 3}`}>{String(index + 1).padStart(2, '0')}</span>
       <span className="timer-info">
-        <strong>{timer.name}</strong>
-        <small>{formatTime(workoutDuration(timer))} · {timer.rounds} rounds · {timer.cycles} {timer.cycles === 1 ? 'cycle' : 'cycles'}</small>
+        <strong>{timerName}</strong>
+        <small>{formatTime(workoutDuration(timer))} · {copy.timerDetails.structure(timer.rounds, timer.cycles)}</small>
         <span className="interval-row">
-          <span><i className="dot work-dot" /> Work {formatCompact(timer.work)}</span>
-          <span><i className="dot rest-dot" /> Rest {formatCompact(timer.rest)}</span>
+          <span><i className="dot work-dot" /> {copy.timerDetails.work} {formatCompact(timer.work)}</span>
+          <span><i className="dot rest-dot" /> {copy.timerDetails.rest} {formatCompact(timer.rest)}</span>
         </span>
       </span>
     </>
@@ -384,6 +386,9 @@ function TimerDetails({ timer, index }: { timer: TimerConfig; index: number }) {
 }
 
 export default function Home() {
+  const { locale, setLocale } = useLocale();
+  const copy = getMessages(locale);
+  const localeName = LOCALE_OPTIONS.find((option) => option.locale === locale)?.name ?? locale;
   const [screen, setScreen] = useState<ScreenName>('home');
   const [returnScreen, setReturnScreen] = useState<ReturnScreen>('home');
   const [timers, setTimers] = useState<TimerConfig[]>(DEFAULT_TIMERS);
@@ -429,7 +434,7 @@ export default function Home() {
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
   const currentPhase = sequence[phaseIndex];
   const nextPhase = sequence[phaseIndex + 1];
-  const curatedVoices = useMemo(() => curateVoices(availableVoices), [availableVoices]);
+  const curatedVoices = useMemo(() => curateVoices(availableVoices, locale), [availableVoices, locale]);
   const recommendedVoices = curatedVoices.filter(({ profile }) => profile.recommended && !profile.novelty);
   const otherVoices = curatedVoices.filter(({ profile }) => !profile.recommended || profile.novelty);
 
@@ -537,7 +542,7 @@ export default function Home() {
     if (!('speechSynthesis' in window)) return;
     const refreshVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      setAvailableVoices(voices.filter((voice) => voice.lang.toLowerCase().startsWith('en')));
+      setAvailableVoices(voices);
     };
     const timer = window.setTimeout(refreshVoices, 0);
     window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
@@ -617,13 +622,18 @@ export default function Home() {
     const liveVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
     const selectedVoice = liveVoices.find((voice) => voice.voiceURI === voiceURI);
     if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.lang = selectedVoice?.lang ?? 'en-US';
+    utterance.lang = selectedVoice?.lang ?? speechLanguageForLocale(locale);
     utterance.rate = speech.rate;
     utterance.pitch = speech.pitch;
     utterance.volume = settings.volume;
     window.speechSynthesis.speak(utterance);
     return utterance;
-  }, [availableVoices, cancelCoachSpeech, settings.voiceEnabled, settings.volume]);
+  }, [availableVoices, cancelCoachSpeech, locale, settings.voiceEnabled, settings.volume]);
+
+  useEffect(() => {
+    activeCoachRef.current = null;
+    cancelCoachSpeech();
+  }, [cancelCoachSpeech, locale]);
 
   const speakCoachAfterPause = useCallback((
     precedingUtterance: SpeechSynthesisUtterance | undefined,
@@ -655,8 +665,8 @@ export default function Home() {
     void playCue(phase.kind);
     const personality = activeCoachRef.current?.personality
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-    return speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index)), { interrupt: true });
-  }, [contextForPhase, playCue, settings.coachPersonality, speakCoach]);
+    return speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale), { interrupt: true });
+  }, [contextForPhase, locale, playCue, settings.coachPersonality, speakCoach]);
 
   const resolveWorkoutCoach = useCallback(() => {
     if (activeCoachRef.current) return activeCoachRef.current;
@@ -670,13 +680,14 @@ export default function Home() {
       preference: settings.voicePreference,
       selectedVoiceURI: settings.voiceURI,
       previousAutomaticVoiceURI: settings.lastAutomaticVoiceURI,
+      locale,
     });
     activeCoachRef.current = coach;
     if (!settings.voiceURI && coach.voiceURI && coach.voiceURI !== settings.lastAutomaticVoiceURI) {
       setSettings((current) => ({ ...current, lastAutomaticVoiceURI: coach.voiceURI }));
     }
     return coach;
-  }, [availableVoices, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
+  }, [availableVoices, locale, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
@@ -748,7 +759,7 @@ export default function Home() {
       return null;
     }
 
-    const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current);
+    const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current, locale);
     displayMessageMemoryRef.current = selection.memory;
     try {
       window.localStorage.setItem(DISPLAY_MESSAGE_MEMORY_STORAGE, JSON.stringify(selection.memory));
@@ -758,7 +769,7 @@ export default function Home() {
     const runnerSelection = { phaseIndex: index, kind, message: selection.message };
     setRunnerMessageSelection(runnerSelection);
     return runnerSelection;
-  }, []);
+  }, [locale]);
 
   const recordCompletedWorkout = useCallback(() => {
     if (recordedWorkoutSessionIdRef.current) return;
@@ -796,7 +807,7 @@ export default function Home() {
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
       const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[phaseIndex]?.kind === 'cooldown';
-      speakCoach(selectPhaseSpeech(personality, 'complete'), { interrupt: !finishingFromCooldown });
+      speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
       releaseWakeLock();
       transitionLockRef.current = false;
       return;
@@ -818,7 +829,7 @@ export default function Home() {
       );
     }
     transitionLockRef.current = false;
-  }, [announcePhase, phaseIndex, playCue, recordCompletedWorkout, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
+  }, [announcePhase, locale, phaseIndex, playCue, recordCompletedWorkout, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
 
   useEffect(() => {
     if (!running || !currentPhase) return;
@@ -841,7 +852,7 @@ export default function Home() {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           const context = contextForPhase(currentPhase, phaseIndex, nextRemaining);
-          const plan = planCoachIntervention(personality, context, coachMemoryRef.current);
+          const plan = planCoachIntervention(personality, context, coachMemoryRef.current, { locale });
           coachMemoryRef.current = plan.memory;
           if (plan.speech) speakCoach(plan.speech);
         }
@@ -851,7 +862,7 @@ export default function Home() {
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [contextForPhase, currentPhase, finishPhase, phaseIndex, playTone, running, settings.coachPersonality, settings.coachPhrasesEnabled, settings.ticking, settings.voiceEnabled, speakCoach]);
+  }, [contextForPhase, currentPhase, finishPhase, locale, phaseIndex, playTone, running, settings.coachPersonality, settings.coachPhrasesEnabled, settings.ticking, settings.voiceEnabled, speakCoach]);
 
   useEffect(() => () => {
     releaseWakeLock();
@@ -874,7 +885,15 @@ export default function Home() {
   };
 
   const updateDraftName = (name: string) => {
-    setDraft((current) => ({ ...current, name, nameIsCustom: name.trim() !== generatedTimerName(current) }));
+    setDraft((current) => {
+      const automaticName = localizeTimerName({ ...current, nameIsCustom: false }, copy);
+      const nameIsCustom = name.trim() !== automaticName;
+      return {
+        ...current,
+        name: nameIsCustom ? name : generatedTimerName(current),
+        nameIsCustom,
+      };
+    });
   };
 
   const resetDraftName = () => {
@@ -890,11 +909,17 @@ export default function Home() {
     };
     const customName = normalizedDraft.name.trim();
     const automaticName = generatedTimerName(normalizedDraft);
+    const localizedAutomaticName = localizeTimerName({ ...normalizedDraft, nameIsCustom: false }, copy);
+    const nameIsCustom = Boolean(
+      normalizedDraft.nameIsCustom
+      && customName
+      && customName !== localizedAutomaticName,
+    );
     const safeTimer: TimerConfig = {
       ...normalizedDraft,
       id: draft.id || `timer-${Date.now()}`,
-      name: customName || automaticName,
-      nameIsCustom: Boolean(customName && customName !== automaticName),
+      name: nameIsCustom ? customName : automaticName,
+      nameIsCustom,
     };
 
     setTimers((current) => {
@@ -1026,10 +1051,10 @@ export default function Home() {
     setLabsUnlockSequence(transition.state);
     if (transition.justUnlocked) {
       setLabsUnlocked(true);
-      setLabsUnlockMessage('Pulse Labs unlocked.');
+      setLabsUnlockMessage(copy.status.labsUnlocked);
       writeLabsSettings(window.localStorage, { version: 1, unlocked: true });
     } else if (transition.remaining !== null) {
-      setLabsUnlockMessage(`${transition.remaining} ${transition.remaining === 1 ? 'tap' : 'taps'} until Pulse Labs.`);
+      setLabsUnlockMessage(copy.status.tapsUntilLabs(transition.remaining));
     } else {
       setLabsUnlockMessage('');
     }
@@ -1073,7 +1098,12 @@ export default function Home() {
     setCalendarStatus('');
 
     try {
-      const url = createWorkoutReminderCalendarDataUrl(settings.reminderDays, settings.reminderTime);
+      const url = createWorkoutReminderCalendarDataUrl(
+        settings.reminderDays,
+        settings.reminderTime,
+        new Date(),
+        copy.settings.calendarEvent,
+      );
       const link = document.createElement('a');
       link.href = url;
       link.download = 'pulse-workout-reminders.ics';
@@ -1081,18 +1111,18 @@ export default function Home() {
       link.target = '_self';
       link.type = 'text/calendar';
       document.body.appendChild(link);
-      setCalendarStatus('Calendar opened. On iPhone, tap Add All, choose a calendar, then tap Add.');
+      setCalendarStatus(copy.status.calendarOpened);
       link.click();
       link.remove();
     } catch {
-      setCalendarStatus('The calendar reminder could not be created on this device.');
+      setCalendarStatus(copy.status.calendarError);
     }
   };
 
   const deleteWorkoutSession = (sessionId: string) => {
     const session = workoutSessions.find((candidate) => candidate.id === sessionId);
     if (!session) return;
-    if (!window.confirm(`Delete ${session.timerName} from workout history?`)) return;
+    if (!window.confirm(copy.status.deleteHistory(displayWorkoutSessionTimerName(session, copy)))) return;
     setWorkoutSessions((current) => current.filter((candidate) => candidate.id !== sessionId));
   };
 
@@ -1107,9 +1137,10 @@ export default function Home() {
       preference: settings.voicePreference,
       selectedVoiceURI: settings.voiceURI,
       previousAutomaticVoiceURI: '',
+      locale,
       random: () => 0,
     });
-    speakCoach(makePreviewSpeech(personality), { interrupt: true, voiceURI: preview.voiceURI });
+    speakCoach(makePreviewSpeech(personality, locale), { interrupt: true, voiceURI: preview.voiceURI });
   };
 
   const totalRemaining = finished
@@ -1138,7 +1169,7 @@ export default function Home() {
 
   if (screen === 'labs') {
     return (
-      <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">Opening Pulse Labs…</p></main>}>
+      <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">{copy.status.openingLabs}</p></main>}>
         <PulseLabsScreen onBack={leaveLabs} onHideLabs={hidePulseLabs} />
       </Suspense>
     );
@@ -1148,43 +1179,43 @@ export default function Home() {
     return (
       <main className="app-shell editor-screen">
         <header className="screen-header">
-          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>Cancel</button>
-          <div className="header-title"><span className="eyebrow">TIMER SETUP</span><strong>{draft.id ? 'Edit timer' : 'New timer'}</strong></div>
-          <button className="text-button accent" onClick={saveTimer}>Save</button>
+          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>{copy.common.cancel}</button>
+          <div className="header-title"><span className="eyebrow">{copy.editor.eyebrow}</span><strong>{draft.id ? copy.editor.editTitle : copy.editor.newTitle}</strong></div>
+          <button className="text-button accent" onClick={saveTimer}>{copy.common.save}</button>
         </header>
 
         <section className="editor-content">
           <label className="name-field">
-            <span>Workout name</span>
-            <input value={draft.name} maxLength={48} onChange={(event) => updateDraftName(event.target.value)} placeholder={generatedTimerName(draft)} />
+            <span>{copy.editor.nameLabel}</span>
+            <input value={localizeTimerName(draft, copy)} maxLength={48} onChange={(event) => updateDraftName(event.target.value)} placeholder={localizeTimerName({ ...draft, nameIsCustom: false }, copy)} />
           </label>
           <div className="name-helper">
-            <span>{draft.nameIsCustom ? 'Custom name' : 'Updates automatically with the intervals'}</span>
-            {draft.nameIsCustom && <button onClick={resetDraftName}>Use automatic name</button>}
+            <span>{draft.nameIsCustom ? copy.editor.customName : copy.editor.automaticNameHelper}</span>
+            {draft.nameIsCustom && <button onClick={resetDraftName}>{copy.editor.useAutomaticName}</button>}
           </div>
 
-          <div className="editor-section-title"><span>Intervals</span><small>SECONDS</small></div>
+          <div className="editor-section-title"><span>{copy.editor.intervals}</span><small>{copy.editor.seconds}</small></div>
           <div className="metric-list">
-            <MetricInput label="Prepare" helper="Countdown before you start" value={draft.prepare} unit="sec" min={0} max={600} onChange={(value) => updateDraftMetric('prepare', value)} />
-            <MetricInput label="Work" helper="Move for this long" value={draft.work} unit="sec" min={1} max={3600} onChange={(value) => updateDraftMetric('work', value)} />
-            <MetricInput label="Rest" helper="Between rounds" value={draft.rest} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('rest', value)} />
-            <MetricInput label="Cooldown" helper="Once after the workout" value={draft.cooldown} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('cooldown', value)} />
+            <MetricInput label={copy.editor.prepare} helper={copy.editor.prepareHelper} value={draft.prepare} unit={copy.editor.secondsUnit} min={0} max={600} onChange={(value) => updateDraftMetric('prepare', value)} />
+            <MetricInput label={copy.editor.work} helper={copy.editor.workHelper} value={draft.work} unit={copy.editor.secondsUnit} min={1} max={3600} onChange={(value) => updateDraftMetric('work', value)} />
+            <MetricInput label={copy.editor.rest} helper={copy.editor.restHelper} value={draft.rest} unit={copy.editor.secondsUnit} min={0} max={3600} onChange={(value) => updateDraftMetric('rest', value)} />
+            <MetricInput label={copy.editor.cooldown} helper={copy.editor.cooldownHelper} value={draft.cooldown} unit={copy.editor.secondsUnit} min={0} max={3600} onChange={(value) => updateDraftMetric('cooldown', value)} />
           </div>
 
-          <div className="editor-section-title"><span>Structure</span><small>REPEATS</small></div>
+          <div className="editor-section-title"><span>{copy.editor.structure}</span><small>{copy.editor.repeats}</small></div>
           <div className="metric-list">
-            <MetricInput label="Rounds" helper="One round is one Work interval" value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraftMetric('rounds', value)} />
-            <MetricInput label="Cycles" helper={`One cycle repeats all ${draft.rounds} rounds`} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraftMetric('cycles', value)} />
-            <MetricInput label="Rest between cycles" helper="Only inserted when cycles are 2 or more" value={draft.cycleRest} unit="sec" min={0} max={3600} onChange={(value) => updateDraftMetric('cycleRest', value)} />
+            <MetricInput label={copy.editor.rounds} helper={copy.editor.roundsHelper} value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraftMetric('rounds', value)} />
+            <MetricInput label={copy.editor.cycles} helper={copy.editor.cyclesHelper(draft.rounds)} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraftMetric('cycles', value)} />
+            <MetricInput label={copy.editor.cycleRest} helper={copy.editor.cycleRestHelper} value={draft.cycleRest} unit={copy.editor.secondsUnit} min={0} max={3600} onChange={(value) => updateDraftMetric('cycleRest', value)} />
           </div>
 
           <aside className="cycle-explainer">
             <span className="explainer-number">?</span>
-            <div><strong>How cycles work</strong><p>Rounds are the Work intervals inside a block. A cycle repeats that whole block. The extra cycle rest is added only between blocks — never after the last one.</p></div>
+            <div><strong>{copy.editor.cycleExplainerTitle}</strong><p>{copy.editor.cycleExplainerBody}</p></div>
           </aside>
 
-          <div className="workout-summary"><span>Estimated duration</span><strong>{formatTime(workoutDuration(draft))}</strong></div>
-          {draft.id && <button className="delete-button" onClick={deleteTimer}>Delete timer</button>}
+          <div className="workout-summary"><span>{copy.editor.estimatedDuration}</span><strong>{formatTime(workoutDuration(draft))}</strong></div>
+          {draft.id && <button className="delete-button" onClick={deleteTimer}>{copy.editor.deleteTimer}</button>}
         </section>
       </main>
     );
@@ -1194,44 +1225,65 @@ export default function Home() {
     return (
       <main className="app-shell settings-screen">
         <header className="screen-header">
-          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>Back</button>
-          <div className="header-title"><span className="eyebrow">PREFERENCES</span><strong>Settings</strong></div>
-          <button className="text-button accent" onClick={() => setScreen(returnScreen)}>Done</button>
+          <button className="text-button muted" onClick={() => setScreen(returnScreen)}>{copy.common.back}</button>
+          <div className="header-title"><span className="eyebrow">{copy.settings.eyebrow}</span><strong>{copy.settings.title}</strong></div>
+          <button className="text-button accent" onClick={() => setScreen(returnScreen)}>{copy.common.done}</button>
         </header>
 
         <section className="settings-content">
           <div className="settings-group">
-            <p className="settings-kicker">TRAINING</p>
+            <p className="settings-kicker">{copy.settings.languageKicker}</p>
+            <div className="language-setting-row">
+              <div><strong>{copy.settings.appLanguage}</strong><small>{copy.settings.languageHelper}</small></div>
+              <div className="language-grid" role="group" aria-label={copy.settings.appLanguageAria}>
+                {LOCALE_OPTIONS.map((option) => (
+                  <button
+                    type="button"
+                    className={locale === option.locale ? 'selected' : ''}
+                    aria-label={option.name}
+                    aria-pressed={locale === option.locale}
+                    lang={option.locale}
+                    key={option.locale}
+                    onClick={() => setLocale(option.locale)}
+                  >{option.code}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <p className="settings-kicker">{copy.settings.trainingKicker}</p>
             <div className="setting-row goal-setting-row">
-              <div><strong>Active days per week</strong><small>Sets your goal streak and milestone pace</small></div>
-              <div className="goal-stepper" aria-label="Weekly active-day goal">
-                <button aria-label="Decrease weekly active-day goal" disabled={settings.weeklyActiveDayGoal <= 1} onClick={() => changeWeeklyActiveDayGoal(-1)}>-</button>
-                <output><strong>{settings.weeklyActiveDayGoal}</strong><small>/ week</small></output>
-                <button aria-label="Increase weekly active-day goal" disabled={settings.weeklyActiveDayGoal >= 7} onClick={() => changeWeeklyActiveDayGoal(1)}>+</button>
+              <div><strong>{copy.settings.activeDaysPerWeek}</strong><small>{copy.settings.activeDaysGoalHelper}</small></div>
+              <div className="goal-stepper" aria-label={copy.settings.weeklyGoalAria}>
+                <button aria-label={copy.settings.decreaseWeeklyGoal} disabled={settings.weeklyActiveDayGoal <= 1} onClick={() => changeWeeklyActiveDayGoal(-1)}>-</button>
+                <output><strong>{settings.weeklyActiveDayGoal}</strong><small>{copy.settings.perWeek}</small></output>
+                <button aria-label={copy.settings.increaseWeeklyGoal} disabled={settings.weeklyActiveDayGoal >= 7} onClick={() => changeWeeklyActiveDayGoal(1)}>+</button>
               </div>
             </div>
             <fieldset className="reminder-settings">
-              <legend>Workout reminders</legend>
-              <p>Choose a schedule, then add one recurring event to your device calendar.</p>
-              <div className="reminder-days" aria-label="Reminder days">
+              <legend>{copy.settings.workoutReminders}</legend>
+              <p>{copy.settings.reminderIntro}</p>
+              <div className="reminder-days" aria-label={copy.settings.reminderDaysAria}>
                 {REMINDER_DAY_OPTIONS.map((day) => {
                   const selected = settings.reminderDays.includes(day.value);
+                  const dayCopy = copy.settings.reminderDays[day.value];
                   return (
                     <button
                       type="button"
-                      aria-label={day.label}
+                      aria-label={dayCopy.label}
                       aria-pressed={selected}
                       className={selected ? 'selected' : ''}
                       key={day.value}
                       onClick={() => toggleReminderDay(day.value)}
-                    >{day.shortLabel}</button>
+                    >{dayCopy.short}</button>
                   );
                 })}
               </div>
               <label className="reminder-time-row">
-                <span><strong>Reminder time</strong><small>Your calendar handles delivery</small></span>
+                <span><strong>{copy.settings.reminderTime}</strong><small>{copy.settings.calendarHandlesDelivery}</small></span>
                 <input
-                  aria-label="Workout reminder time"
+                  aria-label={copy.settings.reminderTimeAria}
                   type="time"
                   value={settings.reminderTime}
                   onChange={(event) => {
@@ -1243,28 +1295,28 @@ export default function Home() {
               </label>
               <button className="calendar-reminder-button" onClick={addCalendarReminders}>
                 <AppIcon name="calendar" size={21} strokeWidth={1.9} />
-                <span><strong>Add reminders to Calendar</strong><small>Works after Pulse is closed</small></span>
+                <span><strong>{copy.settings.addRemindersToCalendar}</strong><small>{copy.settings.worksAfterPulseCloses}</small></span>
                 <AppIcon name="arrow-right" size={18} />
               </button>
               {calendarStatus && <p className="calendar-status" role="status">{calendarStatus}</p>}
             </fieldset>
-            <p className="setting-note">Calendar reminders keep Pulse completely static and private. Edit or remove the recurring event in your calendar app.</p>
+            <p className="setting-note">{copy.settings.reminderPrivacyNote}</p>
           </div>
 
           <div className="settings-group">
-            <p className="settings-kicker">AUDIO</p>
+            <p className="settings-kicker">{copy.audioSettings.kicker}</p>
             <div className="setting-row">
-              <div><strong>Sound effects</strong><small>Phase cues and finish signal</small></div>
-              <Switch label="Sound effects" checked={settings.soundEnabled} onChange={(soundEnabled) => setSettings((current) => ({ ...current, soundEnabled }))} />
+              <div><strong>{copy.audioSettings.soundEffects}</strong><small>{copy.audioSettings.soundEffectsHelper}</small></div>
+              <Switch label={copy.audioSettings.soundEffects} checked={settings.soundEnabled} onChange={(soundEnabled) => setSettings((current) => ({ ...current, soundEnabled }))} />
             </div>
             <button className="setting-row setting-action" onClick={() => { void playCue('work'); }}>
-              <div><strong>Sound scheme</strong><small>One built-in synthetic scheme</small></div>
-              <span className="setting-value">Pulse beep <i className="mini-play"><PlayGlyph /></i></span>
+              <div><strong>{copy.audioSettings.soundScheme}</strong><small>{copy.audioSettings.soundSchemeHelper}</small></div>
+              <span className="setting-value">{copy.audioSettings.pulseBeep} <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <label className="volume-row">
               <span className="volume-icon">−</span>
               <input
-                aria-label="App volume"
+                aria-label={copy.audioSettings.appVolume}
                 type="range"
                 min="0"
                 max="1"
@@ -1277,99 +1329,96 @@ export default function Home() {
               <output>{Math.round(settings.volume * 100)}%</output>
             </label>
             <div className="setting-row">
-              <div><strong>Ticking sound</strong><small>One quiet tick every second</small></div>
-              <Switch label="Ticking sound" checked={settings.ticking} onChange={(ticking) => setSettings((current) => ({ ...current, ticking }))} />
+              <div><strong>{copy.audioSettings.tickingSound}</strong><small>{copy.audioSettings.tickingHelper}</small></div>
+              <Switch label={copy.audioSettings.tickingSound} checked={settings.ticking} onChange={(ticking) => setSettings((current) => ({ ...current, ticking }))} />
             </div>
-            <p className="setting-note">On iPhone, synthetic Web Audio respects Silent Mode. Turn Silent Mode off to hear Pulse cues.</p>
+            <p className="setting-note">{copy.audioSettings.silentModeNote}</p>
           </div>
 
           <div className="settings-group">
-            <p className="settings-kicker">COACH VOICE</p>
+            <p className="settings-kicker">{copy.coachSettings.kicker}</p>
             <div className="setting-row">
-              <div><strong>Voice coach</strong><small>Phase cues and a spoken 3–2–1</small></div>
-              <Switch label="Voice coach" checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
+              <div><strong>{copy.coachSettings.voiceCoach}</strong><small>{copy.coachSettings.voiceCoachHelper}</small></div>
+              <Switch label={copy.coachSettings.voiceCoachSwitch} checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
             </div>
             <div className={`setting-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
-              <div><strong>Coaching phrases</strong><small>Read motivational, recovery, and contextual guidance</small></div>
+              <div><strong>{copy.coachSettings.coachingPhrases}</strong><small>{copy.coachSettings.coachingPhrasesHelper}</small></div>
               <Switch
-                label="Read coaching phrases"
+                label={copy.coachSettings.coachingPhrasesSwitch}
                 checked={settings.coachPhrasesEnabled}
                 disabled={!settings.voiceEnabled}
                 onChange={(coachPhrasesEnabled) => setSettings((current) => ({ ...current, coachPhrasesEnabled }))}
               />
             </div>
             <fieldset className={`coach-choice-section ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
-              <legend>Coach personality</legend>
-              <p>Sets the coach&apos;s wording and delivery for the workout.</p>
+              <legend>{copy.coachSettings.personality}</legend>
+              <p>{copy.coachSettings.personalityHelper}</p>
               <div className="personality-grid">
-                {Object.values(COACH_PERSONALITIES).map((personality) => (
-                  <button
+                {Object.values(COACH_PERSONALITIES).map((personality) => {
+                  const presentation = getCoachPersonalityPresentation(personality.id, locale);
+                  return <button
                     type="button"
                     className={settings.coachPersonality === personality.id ? 'selected' : ''}
                     aria-pressed={settings.coachPersonality === personality.id}
                     key={personality.id}
                     onClick={() => setSettings((current) => ({ ...current, coachPersonality: personality.id }))}
                   >
-                    <strong>{personality.label}</strong>
-                    <small>{personality.description}</small>
-                  </button>
-                ))}
+                    <strong>{presentation.label}</strong>
+                    <small>{presentation.description}</small>
+                  </button>;
+                })}
                 <button
                   type="button"
                   className={`surprise-personality ${settings.coachPersonality === 'surprise' ? 'selected' : ''}`}
                   aria-pressed={settings.coachPersonality === 'surprise'}
                   onClick={() => setSettings((current) => ({ ...current, coachPersonality: 'surprise' }))}
                 >
-                  <strong>Surprise me</strong>
-                  <small>Picks a personality when the workout starts and keeps it throughout</small>
+                  <strong>{copy.coachSettings.surpriseMe}</strong>
+                  <small>{copy.coachSettings.surprisePersonalityHelper}</small>
                 </button>
               </div>
             </fieldset>
             <fieldset className={`coach-choice-section compact ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
-              <legend>Voice preference</legend>
-              <p>Used only when System voice is Automatic.</p>
+              <legend>{copy.coachSettings.voicePreference}</legend>
+              <p>{copy.coachSettings.automaticPreferenceHelper}</p>
               <div className="preference-grid">
-                {([
-                  ['female', 'Female'],
-                  ['male', 'Male'],
-                  ['either', 'Surprise me'],
-                ] as Array<[VoicePreference, string]>).map(([preference, label]) => (
+                {(['female', 'male', 'either'] as VoicePreference[]).map((preference) => (
                   <button
                     type="button"
                     className={settings.voicePreference === preference ? 'selected' : ''}
                     aria-pressed={settings.voicePreference === preference}
                     key={preference}
                     onClick={() => setSettings((current) => ({ ...current, voicePreference: preference }))}
-                  >{label}</button>
+                  >{copy.coachSettings.preference[preference]}</button>
                 ))}
               </div>
             </fieldset>
             <label className={`voice-select-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
-              <span><strong>System voice</strong><small>A specific voice overrides the preference above</small></span>
+              <span><strong>{copy.coachSettings.systemVoice}</strong><small>{copy.coachSettings.systemVoiceHelper}</small></span>
               <select
-                aria-label="Coach voice"
+                aria-label={copy.coachSettings.coachVoiceAria}
                 value={settings.voiceURI}
                 disabled={!settings.voiceEnabled}
                 onChange={(event) => setSettings((current) => ({ ...current, voiceURI: event.target.value }))}
               >
-                <option value="">Automatic</option>
+                <option value="">{copy.coachSettings.automatic}</option>
                 {settings.voiceURI && !curatedVoices.some(({ voice }) => voice.voiceURI === settings.voiceURI) && (
-                  <option value={settings.voiceURI}>Saved voice · unavailable on this device</option>
+                  <option value={settings.voiceURI}>{copy.coachSettings.savedVoiceUnavailable}</option>
                 )}
                 {recommendedVoices.length > 0 && (
-                  <optgroup label="Recommended">
+                  <optgroup label={copy.coachSettings.recommended}>
                     {recommendedVoices.map(({ voice, profile }) => (
                       <option value={voice.voiceURI} key={voice.voiceURI}>
-                        {voice.name} · {profile.gender ?? 'either'}
+                        {voice.name} · {copy.coachSettings.preference[profile.gender ?? 'either']}
                       </option>
                     ))}
                   </optgroup>
                 )}
                 {otherVoices.length > 0 && (
-                  <optgroup label="Other system voices">
+                  <optgroup label={copy.coachSettings.otherSystemVoices}>
                     {otherVoices.map(({ voice, profile }) => (
                       <option value={voice.voiceURI} key={voice.voiceURI}>
-                        {voice.name} · {voice.lang}{profile.novelty ? ' · effect' : ''}
+                        {voice.name} · {voice.lang}{profile.novelty ? ` · ${copy.coachSettings.effect}` : ''}
                       </option>
                     ))}
                   </optgroup>
@@ -1377,34 +1426,36 @@ export default function Home() {
               </select>
             </label>
             <button className="setting-row setting-action" disabled={!settings.voiceEnabled} onClick={previewCoach}>
-              <div><strong>Test coach</strong><small>Preview {settings.coachPersonality === 'surprise' ? 'a surprise personality' : 'this personality'} and voice</small></div>
-              <span className="setting-value">Play <i className="mini-play"><PlayGlyph /></i></span>
+              <div><strong>{copy.coachSettings.testCoach}</strong><small>{copy.coachSettings.previewCoach(settings.coachPersonality === 'surprise')}</small></div>
+              <span className="setting-value">{copy.coachSettings.play} <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <div className="setting-row unavailable">
-              <div><strong>Ducking</strong><small>Reduce other music during cues</small></div>
-              <Switch label="Ducking unavailable" checked={settings.ducking} onChange={() => undefined} disabled />
+              <div><strong>{copy.coachSettings.ducking}</strong><small>{copy.coachSettings.duckingHelper}</small></div>
+              <Switch label={copy.coachSettings.duckingUnavailable} checked={settings.ducking} onChange={() => undefined} disabled />
             </div>
-            <p className="setting-note">Pulse uses this device&apos;s English system voices. Automatic avoids known effect voices and keeps one concrete voice for the entire workout.</p>
-            <p className="setting-note secondary">Web apps on iOS cannot change the volume of Spotify, Apple Music or another app. Pulse can only control its own sounds.</p>
+            <p className="setting-note">{curatedVoices.length > 0
+              ? copy.coachSettings.voiceNote(localeName)
+              : copy.coachSettings.noCompatibleVoice(localeName)}</p>
+            <p className="setting-note secondary">{copy.coachSettings.musicNote}</p>
           </div>
 
           <div className="settings-group">
-            <p className="settings-kicker">DISPLAY</p>
+            <p className="settings-kicker">{copy.displaySettings.kicker}</p>
             <div className="setting-row">
-              <div><strong>Rotation</strong><small>Allow landscape during a workout</small></div>
-              <Switch label="Allow screen rotation" checked={settings.rotation} onChange={(rotation) => setSettings((current) => ({ ...current, rotation }))} />
+              <div><strong>{copy.displaySettings.rotation}</strong><small>{copy.displaySettings.rotationHelper}</small></div>
+              <Switch label={copy.displaySettings.rotationAria} checked={settings.rotation} onChange={(rotation) => setSettings((current) => ({ ...current, rotation }))} />
             </div>
-            <p className="setting-note">Orientation locking depends on iOS and works best when Pulse is opened from the Home Screen.</p>
+            <p className="setting-note">{copy.displaySettings.orientationNote}</p>
           </div>
 
           {labsUnlocked && (
             <div className="settings-group">
-              <p className="settings-kicker">EXPERIMENTAL</p>
+              <p className="settings-kicker">{copy.experimentalSettings.kicker}</p>
               <button ref={labsOpeningControlRef} className="setting-row setting-action" onClick={() => setScreen('labs')}>
-                <div><strong>Pulse Labs</strong><small>Local Mentria text experiments and system-voice previews</small></div>
-                <span className="setting-value">Open <AppIcon name="arrow-right" size={17} /></span>
+                <div><strong>Pulse Labs</strong><small>{copy.experimentalSettings.labsHelper}</small></div>
+                <span className="setting-value">{copy.experimentalSettings.open} <AppIcon name="arrow-right" size={17} /></span>
               </button>
-              <p className="setting-note">Opening Labs never downloads or initializes a model. Model assets require a separate confirmation.</p>
+              <p className="setting-note">{copy.experimentalSettings.labsNote}</p>
             </div>
           )}
 
@@ -1416,16 +1467,16 @@ export default function Home() {
                 <button
                   type="button"
                   className="version-unlock-button"
-                  aria-label={`Pulse version ${APP_VERSION}`}
+                  aria-label={copy.about.versionAria(APP_VERSION)}
                   onClick={activateVersionUnlock}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return;
                     event.preventDefault();
                     activateVersionUnlock();
                   }}
-                >Version {APP_VERSION}</button>
-                {' · Installable PWA · '}
-                <a href="./third-party-notices.txt" target="_blank" rel="noreferrer">Content credits</a>
+                >{copy.about.version} {APP_VERSION}</button>
+                {` · ${copy.about.installablePwa} · `}
+                <a href="./third-party-notices.txt" target="_blank" rel="noreferrer">{copy.about.contentCredits}</a>
               </small>
               <span className="version-unlock-status" role="status" aria-live="polite">{labsUnlockMessage}</span>
             </div>
@@ -1444,6 +1495,8 @@ export default function Home() {
         onSettings={() => openSettings('progress')}
         onDeleteSession={deleteWorkoutSession}
         weeklyGoal={settings.weeklyActiveDayGoal}
+        locale={locale}
+        sessionTimerName={(session) => displayWorkoutSessionTimerName(session, copy)}
       />
     );
   }
@@ -1454,61 +1507,75 @@ export default function Home() {
     return (
       <main className={`runner-screen phase-${phaseClass}`}>
         <header className="runner-header">
-          <button className="round-icon-button" onClick={leaveWorkout} aria-label="Back to timers"><AppIcon name="arrow-left" /></button>
-          <div><p>{activeTimer.name}</p><strong>{formatTime(totalRemaining)} left</strong></div>
-          <button className="round-icon-button" onClick={resetWorkout} aria-label="Reset workout"><AppIcon name="reset" /></button>
+          <button className="round-icon-button" onClick={leaveWorkout} aria-label={copy.runner.backToTimers}><AppIcon name="arrow-left" /></button>
+          <div><p>{localizeTimerName(activeTimer, copy)}</p><strong>{copy.runner.timeLeft(formatTime(totalRemaining))}</strong></div>
+          <button className="round-icon-button" onClick={resetWorkout} aria-label={copy.runner.resetWorkout}><AppIcon name="reset" /></button>
         </header>
 
         <section className="runner-main" aria-live="polite" aria-atomic="true">
-          <p className="phase-kicker">{finished ? 'SESSION' : PHASE_META[currentPhase?.kind ?? 'prepare'].short}</p>
-          <h1>{finished ? 'Complete' : currentPhase?.label}</h1>
+          <p className="phase-kicker">{finished ? copy.runner.sessionKicker : copy.phase[currentPhase?.kind ?? 'prepare'].short}</p>
+          <h1>{finished ? copy.runner.complete : copy.phase[currentPhase?.kind ?? 'prepare'].label}</h1>
           <div className="giant-time">{finished ? <AppIcon name="check" size={132} strokeWidth={2.2} /> : formatTime(remaining)}</div>
           {finished && (
             <div className="completion-progress-card">
-              <strong>+{formatTime(workoutDuration(activeTimer))} training</strong>
-              <span>{progressStreaks.activeDaysThisWeek} of {progressStreaks.weeklyGoal} active days this week · {progressStreaks.currentActiveDays}-day streak</span>
+              <strong>{copy.runner.trainingAdded(formatTime(workoutDuration(activeTimer)))}</strong>
+              <span>{copy.runner.weeklySummary(progressStreaks.activeDaysThisWeek, progressStreaks.weeklyGoal, progressStreaks.currentActiveDays)}</span>
               {newMilestones.length > 0 && (
                 <div className="milestone-celebration">
                   <AppIcon name="trophy" size={20} strokeWidth={2} />
-                  <span><strong>{newMilestones.length === 1 ? 'Milestone unlocked' : `${newMilestones.length} milestones unlocked`}</strong>{newMilestones.map(({ title }) => title).join(' · ')}</span>
+                  <span><strong>{copy.runner.milestonesUnlocked(newMilestones.length)}</strong>{newMilestones.map(({ id }) => copy.progress.milestones[id].title).join(' · ')}</span>
                 </div>
               )}
-              <button onClick={() => setScreen('progress')}>View progress <AppIcon name="arrow-right" size={14} /></button>
+              <button onClick={() => setScreen('progress')}>{copy.runner.viewProgress} <AppIcon name="arrow-right" size={14} /></button>
             </div>
           )}
           {runnerMessage && (
             <figure className={`runner-message ${currentPhase?.kind === 'cooldown' ? 'reflection' : ''}`}>
-              <blockquote>“{runnerMessage.text}”</blockquote>
-              <figcaption>— {runnerMessage.author}</figcaption>
+              <blockquote>{runnerMessage.author ? `“${runnerMessage.text}”` : runnerMessage.text}</blockquote>
+              {runnerMessage.author && <figcaption>— {runnerMessage.author}</figcaption>}
             </figure>
           )}
           <div
             className="phase-progress"
             role="progressbar"
-            aria-label={finished ? 'Session complete' : `${currentPhase?.label ?? 'Current stage'} progress`}
+            aria-label={finished
+              ? copy.runner.sessionComplete
+              : copy.runner.stageProgress(copy.phase[currentPhase?.kind ?? 'prepare'].label)}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(phaseProgress * 100)}
           >
             <div className="phase-progress-label">
-              <span>{finished ? 'Session' : 'Current stage'}</span>
+              <span>{finished ? copy.runner.session : copy.runner.currentStage}</span>
             </div>
             <div className="phase-progress-track" aria-hidden="true"><span style={{ width: `${phaseProgress * 100}%` }} /></div>
           </div>
         </section>
 
         <section className="runner-up-next">
-          <div><span>{finished ? 'Workout' : 'Up next'}</span><strong>{finished ? `${formatTime(workoutDuration(activeTimer))} total` : nextPhase ? `${nextPhase.label} · ${formatTime(nextPhase.duration)}` : 'Finish'}</strong></div>
+          <div>
+            <span>{finished ? copy.runner.workout : copy.runner.upNext}</span>
+            <strong>{finished
+              ? copy.runner.total(formatTime(workoutDuration(activeTimer)))
+              : nextPhase
+                ? `${copy.phase[nextPhase.kind].label} · ${formatTime(nextPhase.duration)}`
+                : copy.runner.finish}</strong>
+          </div>
           <div
             className="workout-progress"
             role="progressbar"
-            aria-label={`Workout progress. Round ${finished ? activeTimer.rounds : currentPhase?.round ?? 1} of ${activeTimer.rounds}, cycle ${finished ? activeTimer.cycles : currentPhase?.cycle ?? 1} of ${activeTimer.cycles}.`}
+            aria-label={copy.runner.workoutProgress(
+              finished ? activeTimer.rounds : currentPhase?.round ?? 1,
+              activeTimer.rounds,
+              finished ? activeTimer.cycles : currentPhase?.cycle ?? 1,
+              activeTimer.cycles,
+            )}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(workoutProgress * 100)}
           >
             <div className="workout-progress-label">
-              <span>Workout</span>
+              <span>{copy.runner.workout}</span>
               <small>R {finished ? activeTimer.rounds : currentPhase?.round ?? 1}/{activeTimer.rounds} · C {finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}/{activeTimer.cycles}</small>
               <strong>{Math.round(workoutProgress * 100)}%</strong>
             </div>
@@ -1533,12 +1600,12 @@ export default function Home() {
         </section>
 
         <section className="runner-controls">
-          <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>Round / {activeTimer.rounds}</span></div>
-          <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? 'Restart workout' : running ? 'Pause workout' : 'Start workout'}>
+          <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>{copy.runner.round} / {activeTimer.rounds}</span></div>
+          <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? copy.runner.restartWorkout : running ? copy.runner.pauseWorkout : copy.runner.startWorkout}>
             <span>{finished ? <AppIcon name="reset" size={34} /> : running ? <PauseGlyph /> : <PlayGlyph />}</span>
-            <small>{finished ? 'Again' : running ? 'Pause' : phaseIndex === 0 && remaining === sequence[0]?.duration ? 'Start' : 'Resume'}</small>
+            <small>{finished ? copy.runner.again : running ? copy.runner.pause : phaseIndex === 0 && remaining === sequence[0]?.duration ? copy.runner.start : copy.runner.resume}</small>
           </button>
-          <div className="runner-stat"><strong>{finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}</strong><span>Cycle / {activeTimer.cycles}</span></div>
+          <div className="runner-stat"><strong>{finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}</strong><span>{copy.runner.cycle} / {activeTimer.cycles}</span></div>
         </section>
       </main>
     );
@@ -1548,35 +1615,36 @@ export default function Home() {
     return (
       <main className="app-shell library-screen">
         <header className="screen-header">
-          <button className="text-button muted" onClick={() => setScreen('home')}>Home</button>
-          <div className="header-title"><span className="eyebrow">YOUR LIBRARY</span><strong>Timers</strong></div>
-          <button className="text-button accent" onClick={() => openEditor(undefined, 'library')}>New</button>
+          <button className="text-button muted" onClick={() => setScreen('home')}>{copy.common.home}</button>
+          <div className="header-title"><span className="eyebrow">{copy.library.eyebrow}</span><strong>{copy.common.timers}</strong></div>
+          <button className="text-button accent" onClick={() => openEditor(undefined, 'library')}>{copy.common.new}</button>
         </header>
 
         <section className="library-content">
-          <div className="library-intro"><div><p className="eyebrow">ALL PROGRAMS</p><h1>{timers.length} timers</h1></div><p>Run, edit, or move a timer. Home keeps your four most recently used timers close.</p></div>
+          <div className="library-intro"><div><p className="eyebrow">{copy.library.allPrograms}</p><h1>{copy.library.timerCount(timers.length)}</h1></div><p>{copy.library.description}</p></div>
           <div className="library-list">
-            {timers.map((timer, index) => (
-              <article className="library-card" key={timer.id}>
-                <button className="library-run" onClick={() => beginWorkout(timer)} aria-label={`Start ${timer.name}`}>
-                  <TimerDetails timer={timer} index={index} />
+            {timers.map((timer, index) => {
+              const timerName = localizeTimerName(timer, copy);
+              return <article className="library-card" key={timer.id}>
+                <button className="library-run" onClick={() => beginWorkout(timer)} aria-label={copy.common.startTimer(timerName)}>
+                  <TimerDetails timer={timer} index={index} copy={copy} />
                   <span className="play-button"><PlayGlyph /></span>
                 </button>
                 <div className="library-actions">
-                  <button onClick={() => moveTimer(index, -1)} disabled={index === 0} aria-label={`Move ${timer.name} up`}><AppIcon name="chevron-up" size={18} /></button>
-                  <button onClick={() => moveTimer(index, 1)} disabled={index === timers.length - 1} aria-label={`Move ${timer.name} down`}><AppIcon name="chevron-down" size={18} /></button>
-                  <button className="edit-action" onClick={() => openEditor(timer, 'library')} aria-label={`Edit ${timer.name}`}>Edit</button>
+                  <button onClick={() => moveTimer(index, -1)} disabled={index === 0} aria-label={copy.common.moveTimerUp(timerName)}><AppIcon name="chevron-up" size={18} /></button>
+                  <button onClick={() => moveTimer(index, 1)} disabled={index === timers.length - 1} aria-label={copy.common.moveTimerDown(timerName)}><AppIcon name="chevron-down" size={18} /></button>
+                  <button className="edit-action" onClick={() => openEditor(timer, 'library')} aria-label={copy.common.editTimer(timerName)}>{copy.common.edit}</button>
                 </div>
-              </article>
-            ))}
+              </article>;
+            })}
           </div>
         </section>
 
-        <nav className="bottom-nav" aria-label="Primary navigation">
-          <button className="nav-item" onClick={() => setScreen('home')}><AppIcon name="home" />Home</button>
-          <button className="nav-item active" onClick={() => setScreen('library')}><AppIcon name="timer" />Timers</button>
-          <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />Progress</button>
-          <button className="nav-item" onClick={() => openSettings('library')}><AppIcon name="settings" />Settings</button>
+        <nav className="bottom-nav" aria-label={copy.common.primaryNavigation}>
+          <button className="nav-item" onClick={() => setScreen('home')}><AppIcon name="home" />{copy.common.home}</button>
+          <button className="nav-item active" onClick={() => setScreen('library')}><AppIcon name="timer" />{copy.common.timers}</button>
+          <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />{copy.common.progress}</button>
+          <button className="nav-item" onClick={() => openSettings('library')}><AppIcon name="settings" />{copy.common.settings}</button>
         </nav>
       </main>
     );
@@ -1584,30 +1652,30 @@ export default function Home() {
 
   const homeTimers = selectHomeTimers(timers, recentTimerIds);
   return (
-    <main className="app-shell home-screen">
+      <main className="app-shell home-screen">
       <header className="topbar">
-        <div className="brand-lockup"><span className="brand-mark">P</span><div><p className="eyebrow">INTERVAL TRAINING</p><h1>Pulse</h1></div></div>
-        <button className="icon-button" aria-label="Open settings" onClick={() => openSettings('home')}><AppIcon name="settings" /></button>
+        <div className="brand-lockup"><span className="brand-mark">P</span><div><p className="eyebrow">{copy.home.brandEyebrow}</p><h1>Pulse</h1></div></div>
+        <button className="icon-button" aria-label={copy.common.openSettings} onClick={() => openSettings('home')}><AppIcon name="settings" /></button>
       </header>
 
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <p className="eyebrow dark">READY WHEN YOU ARE</p>
-          <h2 id="hero-title">Make every<br />second count.</h2>
-          <p>Build focused interval workouts and take them anywhere — even offline.</p>
+          <p className="eyebrow dark">{copy.home.readyEyebrow}</p>
+          <h2 id="hero-title">{copy.home.heroFirstLine}<br />{copy.home.heroSecondLine}</h2>
+          <p>{copy.home.description}</p>
         </div>
-        <button className="new-timer-button" onClick={() => openEditor(undefined, 'home')}><span className="plus">+</span>New timer</button>
+        <button className="new-timer-button" onClick={() => openEditor(undefined, 'home')}><span className="plus">+</span>{copy.home.newTimer}</button>
       </section>
 
-      <section className="home-progress" aria-label="Weekly progress">
+      <section className="home-progress" aria-label={copy.home.weeklyProgress}>
         <button className="home-progress-card" onClick={() => setScreen('progress')}>
           <div>
-            <p className="eyebrow">THIS WEEK</p>
-            <strong>{formatProgressMinutes(thisWeekProgress.totalSeconds)}<small> min</small></strong>
+            <p className="eyebrow">{copy.home.thisWeek}</p>
+            <strong>{formatProgressMinutes(thisWeekProgress.totalSeconds)}<small> {copy.home.minutesUnit}</small></strong>
           </div>
           <div className="home-progress-stat">
             <span>{progressStreaks.currentActiveDays}</span>
-            <small>day streak</small>
+            <small>{copy.home.dayStreak}</small>
           </div>
           <span className="home-progress-arrow"><AppIcon name="arrow-right" size={20} /></span>
         </button>
@@ -1615,29 +1683,30 @@ export default function Home() {
 
       <section className="workouts" aria-labelledby="workouts-title">
         <div className="section-heading">
-          <div><p className="eyebrow">QUICK START</p><h2 id="workouts-title">Recent timers</h2></div>
-          <button className="manage-link" onClick={() => setScreen('library')}>Manage {timers.length} <AppIcon name="arrow-right" size={13} /></button>
+          <div><p className="eyebrow">{copy.home.quickStart}</p><h2 id="workouts-title">{copy.home.recentTimers}</h2></div>
+          <button className="manage-link" onClick={() => setScreen('library')}>{copy.home.manage(timers.length)} <AppIcon name="arrow-right" size={13} /></button>
         </div>
 
         {homeTimers.length === 0 ? (
-          <div className="empty-state"><strong>No timers yet</strong><p>Create one and it will stay saved on this device.</p><button onClick={() => openEditor(undefined, 'home')}>Create timer</button></div>
+          <div className="empty-state"><strong>{copy.home.emptyTitle}</strong><p>{copy.home.emptyBody}</p><button onClick={() => openEditor(undefined, 'home')}>{copy.home.createTimer}</button></div>
         ) : (
           <div className="timer-list">
-            {homeTimers.map((timer, index) => (
-              <button className="timer-card timer-launch" key={timer.id} onClick={() => beginWorkout(timer)} aria-label={`Start ${timer.name}`}>
-                <TimerDetails timer={timer} index={index} />
+            {homeTimers.map((timer, index) => {
+              const timerName = localizeTimerName(timer, copy);
+              return <button className="timer-card timer-launch" key={timer.id} onClick={() => beginWorkout(timer)} aria-label={copy.common.startTimer(timerName)}>
+                <TimerDetails timer={timer} index={index} copy={copy} />
                 <span className="play-button"><PlayGlyph /></span>
-              </button>
-            ))}
+              </button>;
+            })}
           </div>
         )}
       </section>
 
-      <nav className="bottom-nav" aria-label="Primary navigation">
-        <button className="nav-item active" onClick={() => setScreen('home')}><AppIcon name="home" />Home</button>
-        <button className="nav-item" onClick={() => setScreen('library')}><AppIcon name="timer" />Timers</button>
-        <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />Progress</button>
-        <button className="nav-item" onClick={() => openSettings('home')}><AppIcon name="settings" />Settings</button>
+      <nav className="bottom-nav" aria-label={copy.common.primaryNavigation}>
+        <button className="nav-item active" onClick={() => setScreen('home')}><AppIcon name="home" />{copy.common.home}</button>
+        <button className="nav-item" onClick={() => setScreen('library')}><AppIcon name="timer" />{copy.common.timers}</button>
+        <button className="nav-item" onClick={() => setScreen('progress')}><AppIcon name="progress" />{copy.common.progress}</button>
+        <button className="nav-item" onClick={() => openSettings('home')}><AppIcon name="settings" />{copy.common.settings}</button>
       </nav>
     </main>
   );

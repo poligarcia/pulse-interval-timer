@@ -56,11 +56,8 @@ export type ProgressMilestoneId = 'first-workout' | 'ten-workouts' | 'two-goal-w
 
 export type ProgressMilestone = {
   id: ProgressMilestoneId;
-  title: string;
-  description: string;
   progress: number;
   target: number;
-  progressLabel: string;
   unlocked: boolean;
 };
 

@@ -8,4 +8,4 @@ export {
   normalizeReminderDays,
   normalizeReminderTime,
 } from './reminders.ts';
-export type { ReminderDay, ReminderDayOption } from './types.ts';
+export type { ReminderDay, ReminderDayOption, WorkoutReminderCalendarCopy } from './types.ts';

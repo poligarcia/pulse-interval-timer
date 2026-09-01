@@ -1,7 +1,7 @@
 export type DisplayMessageData = {
   id: string;
   text: string;
-  author: string;
+  author: string | null;
 };
 
 function mentria(id: string, text: string): DisplayMessageData {

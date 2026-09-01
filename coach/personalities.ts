@@ -1,3 +1,9 @@
+import type { Locale } from '../i18n/locales.ts';
+import {
+  getCoachPreview,
+  localizeCoachPhaseCues,
+  localizeCoachPhraseText,
+} from './localization.ts';
 import type {
   CoachContext,
   CoachIntent,
@@ -193,11 +199,13 @@ export function selectDeterministicCoachPhrase(
   personalityId: CoachPersonalityId,
   fatigueZone: FatigueZone,
   intent: CoachIntent,
+  locale: Locale = 'en',
 ): CoachPhrase {
   const phrases = COACH_PERSONALITIES[personalityId].phrases;
-  return phrases.find((phrase) => phrase.zones.includes(fatigueZone) && phrase.intent === intent)
+  const phrase = phrases.find((candidate) => candidate.zones.includes(fatigueZone) && candidate.intent === intent)
     ?? phrases.find((phrase) => phrase.zones.includes(fatigueZone))
     ?? phrases[0];
+  return { ...phrase, text: localizeCoachPhraseText(phrase.id, phrase.text, locale) };
 }
 
 export function makeCoachSpeech(
@@ -221,10 +229,11 @@ export function selectPhaseSpeech(
   personalityId: CoachPersonalityId,
   phase: PhaseKind | 'complete',
   context?: Pick<CoachContext, 'round' | 'cycle' | 'isFinalRound' | 'isFinalCycle'>,
+  locale: Locale = 'en',
 ): CoachSpeech {
   const personality = COACH_PERSONALITIES[personalityId];
   const cueKey = phase === 'work' && context?.isFinalRound && context.isFinalCycle ? 'finalWork' : phase;
-  const cues = personality.phaseCues[cueKey];
+  const cues = localizeCoachPhaseCues(personalityId, cueKey, personality.phaseCues[cueKey], locale);
   const variant = context ? (context.round + context.cycle) % cues.length : 0;
   return makeCoachSpeech(personalityId, `${personalityId}-${cueKey}-${variant}`, cues[variant], 'phase');
 }
@@ -233,12 +242,6 @@ export function makeCountdownSpeech(personalityId: CoachPersonalityId, count: nu
   return makeCoachSpeech(personalityId, `countdown-${count}`, String(count), 'countdown');
 }
 
-export function makePreviewSpeech(personalityId: CoachPersonalityId): CoachSpeech {
-  const previews: Record<CoachPersonalityId, string> = {
-    focused: 'Ready. Find your pace. Three, two, one. Start.',
-    energetic: 'Ready! Stay with me. Three, two, one. Go!',
-    tough: 'Ready. Keep working. Three, two, one. Go.',
-    calm: 'Ready. Find your rhythm. Three, two, one. Begin.',
-  };
-  return makeCoachSpeech(personalityId, `${personalityId}-preview`, previews[personalityId], 'preview');
+export function makePreviewSpeech(personalityId: CoachPersonalityId, locale: Locale = 'en'): CoachSpeech {
+  return makeCoachSpeech(personalityId, `${personalityId}-preview`, getCoachPreview(personalityId, locale), 'preview');
 }

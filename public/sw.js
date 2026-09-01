@@ -1,8 +1,10 @@
 const APP_CACHE_PREFIX = 'pulse-app-';
-const CACHE_NAME = `${APP_CACHE_PREFIX}v9`;
+const CACHE_NAME = `${APP_CACHE_PREFIX}v10`;
 const APP_SHELL = [
   './',
   './manifest.webmanifest',
+  './manifest.es.webmanifest',
+  './manifest.pt.webmanifest',
   './third-party-notices.txt',
   './icons/icon-180.png',
   './icons/icon-192.png',

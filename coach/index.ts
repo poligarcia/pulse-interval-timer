@@ -1,5 +1,6 @@
 export { deriveCoachContext } from './context.ts';
 export { createDisplayMessageMemory, makeDisplayMessageSpeech, selectDisplayMessage } from './display-messages.ts';
+export { displayMessagesForLocale } from './display-message-locales.ts';
 export { createCoachMemory, planCoachIntervention } from './interventions.ts';
 export {
   COACH_PERSONALITIES,
@@ -10,7 +11,8 @@ export {
   selectDeterministicCoachPhrase,
   selectPhaseSpeech,
 } from './personalities.ts';
-export { curateVoices, resolveActiveCoach } from './voices.ts';
+export { curateVoices, resolveActiveCoach, speechLanguageForLocale } from './voices.ts';
+export { getCoachPersonalityPresentation } from './localization.ts';
 export type {
   ActiveCoach,
   CoachMemory,

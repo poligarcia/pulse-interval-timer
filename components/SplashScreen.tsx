@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getMessages, useLocale } from '@/i18n';
 
 const SPLASH_EXIT_DELAY_MS = 1350;
 const SPLASH_REMOVE_DELAY_MS = 1850;
@@ -8,6 +9,8 @@ const REDUCED_MOTION_EXIT_DELAY_MS = 80;
 const REDUCED_MOTION_REMOVE_DELAY_MS = 180;
 
 export function SplashScreen() {
+  const { locale } = useLocale();
+  const copy = getMessages(locale);
   const [isExiting, setIsExiting] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
 
@@ -35,7 +38,7 @@ export function SplashScreen() {
     <div
       className={`splash-screen${isExiting ? ' is-exiting' : ''}`}
       role="status"
-      aria-label="Opening Pulse"
+      aria-label={copy.shell.openingPulse}
     >
       <div className="splash-glow" aria-hidden="true" />
       <div className="splash-content">
@@ -51,7 +54,7 @@ export function SplashScreen() {
           <i />
           <span />
         </div>
-        <p>Interval training</p>
+        <p>{copy.shell.splashTagline}</p>
       </div>
     </div>
   );

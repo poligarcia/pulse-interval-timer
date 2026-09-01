@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { SplashScreen } from '@/components/SplashScreen';
+import { LocaleProvider } from '@/i18n';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Pulse — Interval Timer',
-  description: 'Custom interval workouts with rounds, cycles and offline support.',
+  description: 'Custom interval workouts with rounds, cycles, progress, reminders, and offline support.',
   applicationName: 'Pulse',
   appleWebApp: {
     capable: true,
@@ -44,13 +45,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <head>
-        <link rel="manifest" href="./manifest.webmanifest" />
+        <link id="pulse-manifest" rel="manifest" href="./manifest.webmanifest" />
         <link rel="icon" type="image/png" href="./favicon.png" />
         <link rel="apple-touch-icon" href="./icons/icon-180.png" />
       </head>
       <body>
-        {children}
-        <SplashScreen />
+        <LocaleProvider>
+          {children}
+          <SplashScreen />
+        </LocaleProvider>
       </body>
     </html>
   );
