@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SplashScreen } from '@/components/SplashScreen';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -47,7 +48,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="icon" type="image/png" href="./favicon.png" />
         <link rel="apple-touch-icon" href="./icons/icon-180.png" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <SplashScreen />
+      </body>
     </html>
   );
 }
