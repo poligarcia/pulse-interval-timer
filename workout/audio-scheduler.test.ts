@@ -121,3 +121,17 @@ test('resume continues from fractional elapsed time without replaying an old tic
   assert.deepEqual(resumedTicks.map(({ event }) => event.id), ['tick-0-2']);
   assert.equal(resumedTicks[0].audioTime, 5.825);
 });
+
+test('resume can suppress the current phase cue', () => {
+  const fixture = schedulerFixture();
+  fixture.scheduler.start({
+    anchorAudioTime: 5.075,
+    anchorElapsedMs: 1250,
+    includeCurrentPhaseCue: false,
+  });
+
+  assert.equal(
+    fixture.scheduled.some(({ event }) => event.id === 'current-phase-0'),
+    false,
+  );
+});

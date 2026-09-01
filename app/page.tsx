@@ -1284,6 +1284,7 @@ export default function Home() {
       cancelCoachSpeech();
       releaseWakeLock();
     } else {
+      const isResuming = hasWorkoutStarted;
       const runGeneration = workoutRunGenerationRef.current + 1;
       workoutRunGenerationRef.current = runGeneration;
       finishIntentRef.current = false;
@@ -1310,12 +1311,13 @@ export default function Home() {
           audioContext,
           pausedSnapshot.elapsedMs,
           audioContext.currentTime + leadSeconds,
+          !isResuming,
         )
         : null;
       runningRef.current = true;
       setRunning(true);
       const resumedPhase = sequence[pausedSnapshot.phaseIndex];
-      if (resumedPhase) {
+      if (resumedPhase && !isResuming) {
         if (!scheduler?.hasScheduled(`current-phase-${pausedSnapshot.phaseIndex}`)) {
           void playCue(resumedPhase.kind);
         }
