@@ -518,7 +518,7 @@ const esAR: AppMessages = {
   runner: {
     backToTimers: 'Volver a timers', timeLeft: (time) => `${time} restantes`, resetWorkout: 'Reiniciar entrenamiento',
     sessionKicker: 'SESIÓN', complete: 'Completado', trainingAdded: (time) => `+${time} de entrenamiento`,
-    weeklySummary: (activeDays, goal, streak) => `${activeDays} de ${goal} días activos esta semana · racha de ${streak} días`,
+    weeklySummary: (activeDays, goal, streak) => `${activeDays} de ${goal} días activos esta semana · racha de ${streak} ${streak === 1 ? 'día' : 'días'}`,
     milestonesUnlocked: (count) => count === 1 ? 'Hito desbloqueado' : `${count} hitos desbloqueados`,
     viewProgress: 'Ver progreso', sessionComplete: 'Sesión completada', stageProgress: (stage) => `Progreso de ${stage}`,
     session: 'Sesión', currentStage: 'Etapa actual', workout: 'Entrenamiento', upNext: 'A continuación',
@@ -613,7 +613,7 @@ const ptBR: AppMessages = {
   phase: {
     prepare: { label: 'Preparação', short: 'Prepare-se' },
     work: { label: 'Trabalho', short: 'Vamos' },
-    rest: { label: 'Descanso', short: 'Recupere' },
+    rest: { label: 'Descanso', short: 'Recupere-se' },
     cycleRest: { label: 'Descanso entre ciclos', short: 'Reinicie' },
     cooldown: { label: 'Volta à calma', short: 'Respire' },
   },
@@ -685,7 +685,7 @@ const ptBR: AppMessages = {
   runner: {
     backToTimers: 'Voltar aos timers', timeLeft: (time) => `${time} restantes`, resetWorkout: 'Reiniciar treino',
     sessionKicker: 'SESSÃO', complete: 'Concluído', trainingAdded: (time) => `+${time} de treino`,
-    weeklySummary: (activeDays, goal, streak) => `${activeDays} de ${goal} dias ativos nesta semana · sequência de ${streak} dias`,
+    weeklySummary: (activeDays, goal, streak) => `${activeDays} de ${goal} dias ativos nesta semana · sequência de ${streak} ${streak === 1 ? 'dia' : 'dias'}`,
     milestonesUnlocked: (count) => count === 1 ? 'Marco desbloqueado' : `${count} marcos desbloqueados`,
     viewProgress: 'Ver progresso', sessionComplete: 'Sessão concluída', stageProgress: (stage) => `Progresso de ${stage}`,
     session: 'Sessão', currentStage: 'Etapa atual', workout: 'Treino', upNext: 'A seguir',

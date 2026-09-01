@@ -681,7 +681,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .round-icon-button { display: grid; place-items: center; width: 47px; height: 47px; border: 1px solid #383d3f; border-radius: 50%; color: var(--phase); background: #202426; }
 .runner-main { display: grid; grid-template-rows: auto auto 1fr auto auto auto; justify-items: center; align-items: center; padding: 26px 18px 17px; }
 .phase-kicker { margin: 0; padding: 6px 10px; border: 1px solid rgb(18 20 22 / 24%); border-radius: 99px; font-size: 10px; font-weight: 1000; letter-spacing: .15em; }
-.runner-main h1 { margin: 11px 0 0; font-size: clamp(52px, 15vw, 90px); font-weight: 1000; letter-spacing: -.08em; line-height: .9; text-transform: uppercase; }
+.runner-main h1 { max-width: 100%; margin: 11px 0 0; font-size: clamp(52px, 15vw, 90px); font-weight: 1000; letter-spacing: -.08em; line-height: .9; text-align: center; text-transform: uppercase; }
+.runner-screen.phase-prepare .runner-main h1,
+.runner-screen.phase-cycleRest .runner-main h1 { font-size: clamp(44px, 12vw, 76px); line-height: .88; }
 .giant-time { display: grid; place-items: center; align-self: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: clamp(105px, 31vw, 225px); font-weight: 900; letter-spacing: -.09em; line-height: .82; }
 .runner-message { width: min(570px, 100%); margin: 9px 0 18px; padding: 15px 18px; border: 1px solid rgb(18 20 22 / 20%); border-radius: 17px; background: rgb(255 255 255 / 18%); text-align: center; }
 .runner-message blockquote { margin: 0; font-size: clamp(15px, 4vw, 20px); font-weight: 850; line-height: 1.22; letter-spacing: -.025em; }
@@ -889,6 +891,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .runner-header p { max-width: 125px; white-space: normal; }
   .runner-main { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; padding: 12px 24px 14px; }
   .runner-main h1 { margin-top: 5px; font-size: clamp(36px, 8vh, 65px); }
+  .runner-screen.phase-prepare .runner-main h1,
+  .runner-screen.phase-cycleRest .runner-main h1 { font-size: clamp(32px, 7vh, 52px); }
   .giant-time { font-size: clamp(100px, 33vh, 200px); }
   .runner-message { position: static; width: min(570px, 100%); margin: 4px 0 10px; padding: 9px 12px; }
   .runner-message blockquote, .runner-message.reflection blockquote { font-size: 12px; }
@@ -901,6 +905,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .main-control > span { width: 76px; height: 76px; }
   .runner-stat { grid-row: 2; }
   .runner-stat strong { font-size: 38px; }
+  .runner-screen.phase-complete .runner-main { grid-template-rows: auto auto auto auto auto; align-content: center; gap: 3px; overflow-y: auto; padding-top: 8px; padding-bottom: 8px; }
+  .runner-screen.phase-complete .runner-main h1 { margin-top: 1px; font-size: clamp(34px, 7vh, 52px); }
+  .runner-screen.phase-complete .giant-time { min-height: 0; }
+  .runner-screen.phase-complete .giant-time svg { width: clamp(64px, 14vh, 90px); height: clamp(64px, 14vh, 90px); }
+  .runner-screen.phase-complete .completion-progress-card { gap: 3px; margin-bottom: 0; padding: 8px 14px; border-radius: 14px; }
+  .runner-screen.phase-complete .completion-progress-card > strong { font-size: 16px; }
+  .runner-screen.phase-complete .completion-progress-card > span { font-size: 9px; }
+  .runner-screen.phase-complete .completion-progress-card button { padding: 2px 0; font-size: 9px; }
+  .runner-screen.phase-complete .milestone-celebration { gap: 5px; margin-top: 1px; padding: 5px 8px; }
+  .runner-screen.phase-complete .runner-message { margin: 2px 0 0; padding: 7px 10px; }
+  .runner-screen.phase-complete .phase-progress { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

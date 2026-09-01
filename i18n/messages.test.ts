@@ -24,6 +24,9 @@ test('timer structure copy handles singular and plural forms', () => {
 test('locale-specific copy keeps timer as the global product term', () => {
   assert.equal(getMessages('es-AR').home.newTimer, 'Nuevo timer');
   assert.equal(getMessages('pt-BR').home.newTimer, 'Novo timer');
+  assert.equal(getMessages('pt-BR').phase.rest.short, 'Recupere-se');
+  assert.match(getMessages('es-AR').runner.weeklySummary(1, 3, 1), /racha de 1 día$/);
+  assert.match(getMessages('pt-BR').runner.weeklySummary(1, 3, 1), /sequência de 1 dia$/);
 });
 
 test('automatic timer names render from semantic interval values in the active locale', () => {
