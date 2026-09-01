@@ -1120,6 +1120,11 @@ export default function Home() {
     ? Math.min(1, Math.max(0, (currentPhase.duration - remaining) / currentPhase.duration))
     : finished ? 1 : 0;
 
+  const totalDuration = sequence.reduce((sum, phase) => sum + phase.duration, 0);
+  const workoutProgress = totalDuration > 0
+    ? Math.min(1, Math.max(0, (totalDuration - totalRemaining) / totalDuration))
+    : finished ? 1 : 0;
+
   const currentMessageKind: DisplayMessageKind | null = currentPhase?.kind === 'rest' || currentPhase?.kind === 'cycleRest'
     ? 'motivation'
     : currentPhase?.kind === 'cooldown'
@@ -1477,12 +1482,55 @@ export default function Home() {
               <figcaption>— {runnerMessage.author}</figcaption>
             </figure>
           )}
-          <div className="phase-progress" aria-label={`${Math.round(phaseProgress * 100)} percent complete`}><span style={{ width: `${phaseProgress * 100}%` }} /></div>
+          <div
+            className="phase-progress"
+            role="progressbar"
+            aria-label={finished ? 'Session complete' : `${currentPhase?.label ?? 'Current stage'} progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(phaseProgress * 100)}
+          >
+            <div className="phase-progress-label">
+              <span>{finished ? 'Session' : 'Current stage'}</span>
+              <strong>{Math.round(phaseProgress * 100)}%</strong>
+            </div>
+            <div className="phase-progress-track" aria-hidden="true"><span style={{ width: `${phaseProgress * 100}%` }} /></div>
+          </div>
         </section>
 
         <section className="runner-up-next">
           <div><span>{finished ? 'Workout' : 'Up next'}</span><strong>{finished ? `${formatTime(workoutDuration(activeTimer))} total` : nextPhase ? `${nextPhase.label} · ${formatTime(nextPhase.duration)}` : 'Finish'}</strong></div>
-          <div className="mini-progress" aria-hidden="true"><span style={{ width: `${phaseProgress * 100}%` }} /></div>
+          <div
+            className="workout-progress"
+            role="progressbar"
+            aria-label={`Workout progress. Round ${finished ? activeTimer.rounds : currentPhase?.round ?? 1} of ${activeTimer.rounds}, cycle ${finished ? activeTimer.cycles : currentPhase?.cycle ?? 1} of ${activeTimer.cycles}.`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(workoutProgress * 100)}
+          >
+            <div className="workout-progress-label">
+              <span>Workout</span>
+              <small>R {finished ? activeTimer.rounds : currentPhase?.round ?? 1}/{activeTimer.rounds} · C {finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}/{activeTimer.cycles}</small>
+              <strong>{Math.round(workoutProgress * 100)}%</strong>
+            </div>
+            <div className="workout-timeline" aria-hidden="true">
+              {sequence.map((phase, index) => {
+                const segmentProgress = finished || index < phaseIndex
+                  ? 1
+                  : index === phaseIndex ? phaseProgress : 0;
+                const startsCycle = index > 0 && sequence[index - 1]?.cycle !== phase.cycle;
+                return (
+                  <span
+                    className={`workout-segment${startsCycle ? ' starts-cycle' : ''}`}
+                    style={{ flexGrow: Math.max(phase.duration, 1) }}
+                    key={`${phase.kind}-${phase.cycle}-${phase.round}-${index}`}
+                  >
+                    <i style={{ width: `${segmentProgress * 100}%` }} />
+                  </span>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         <section className="runner-controls">
