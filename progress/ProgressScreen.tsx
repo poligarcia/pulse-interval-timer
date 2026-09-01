@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { AppIcon } from '@/components/AppIcon';
 import { getMessages } from '@/i18n';
@@ -23,6 +23,7 @@ type ProgressScreenProps = {
   weeklyGoal: number;
   locale: Locale;
   sessionTimerName: (session: WorkoutSession) => string;
+  announcement?: string;
 };
 
 function displayMinutes(seconds: number) {
@@ -69,8 +70,10 @@ export function ProgressScreen({
   weeklyGoal,
   locale,
   sessionTimerName,
+  announcement = '',
 }: ProgressScreenProps) {
   const copy = getMessages(locale);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [period, setPeriod] = useState<ProgressPeriod>('week');
   const [now] = useState(() => new Date());
   const summary = useMemo(() => summarizeProgress(sessions, period, now), [now, period, sessions]);
@@ -80,13 +83,18 @@ export function ProgressScreen({
   const history = useMemo(() => groupWorkoutHistory(sessions, locale), [locale, sessions]);
   const maxBucket = Math.max(1, ...buckets.map((bucket) => bucket.totalSeconds));
 
+  useEffect(() => {
+    if (announcement) titleRef.current?.focus();
+  }, [announcement]);
+
   return (
     <main className="app-shell progress-screen">
       <header className="screen-header progress-header">
         <button className="text-button muted" onClick={onHome}>{copy.common.home}</button>
-        <div className="header-title"><span className="eyebrow">{copy.progress.eyebrow}</span><strong>{copy.common.progress}</strong></div>
+        <div className="header-title"><span className="eyebrow">{copy.progress.eyebrow}</span><h1 ref={titleRef} tabIndex={announcement ? -1 : undefined}>{copy.common.progress}</h1></div>
         <button className="text-button accent" onClick={onSettings}>{copy.common.settings}</button>
       </header>
+      {announcement && <p className="visually-hidden" role="status">{announcement}</p>}
 
       <section className="progress-content">
         <div className="progress-hero">
@@ -207,14 +215,20 @@ export function ProgressScreen({
                         <div className="history-sessions">
                           {day.sessions.map((session) => {
                             const timerName = sessionTimerName(session);
-                            return <div className="history-session" key={session.id}>
+                            const stopped = session.status === 'stopped';
+                            return <div className={`history-session${stopped ? ' partial-session' : ''}`} key={session.id}>
                               <span className="history-session-mark" aria-hidden="true" />
                               <div>
-                                <strong>{timerName}</strong>
+                                <div className="history-session-title">
+                                  <strong>{timerName}</strong>
+                                  {stopped && <span>{copy.progress.partialSession}</span>}
+                                </div>
                                 <small>{copy.progress.trainingAndActive(formatDuration(session.totalSeconds, copy), formatDuration(session.activeWorkSeconds, copy))}</small>
                               </div>
                               <div className="history-session-meta">
-                                <span>{copy.progress.roundsAndCycles(session.rounds, session.cycles)}</span>
+                                <span>{stopped
+                                  ? copy.progress.intervalProgress(session.completedWorkIntervals, session.plannedWorkIntervals)
+                                  : copy.progress.roundsAndCycles(session.rounds, session.cycles)}</span>
                                 <button onClick={() => onDeleteSession(session.id)} aria-label={copy.progress.deleteFromHistory(timerName)}>{copy.progress.delete}</button>
                               </div>
                             </div>;

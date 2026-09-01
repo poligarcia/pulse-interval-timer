@@ -33,6 +33,8 @@ import type {
 import {
   calculateProgressMilestones,
   calculateProgressStreaks,
+  calculateWorkoutSessionMetrics,
+  createStoppedWorkoutSession,
   createWorkoutSession,
   parseWorkoutSessions,
   summarizeProgress,
@@ -62,6 +64,10 @@ import {
 } from '@/labs/storage';
 import { getMessages, localizeTimerName, LOCALE_OPTIONS, useLocale } from '@/i18n';
 import type { AppMessages } from '@/i18n';
+import { WorkoutAudioScheduler } from '@/workout/audio-scheduler';
+import type { ScheduledAudioHandle } from '@/workout/audio-scheduler';
+import { WorkoutTimeline } from '@/workout/timeline';
+import type { WorkoutTimelineEvent, WorkoutTimelineSnapshot } from '@/workout/timeline';
 
 const PulseLabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
 
@@ -77,6 +83,46 @@ type TimerConfig = {
   cycleRest: number;
   cooldown: number;
 };
+
+function normalizeTimerMetric(value: number, min: number, max: number) {
+  const finiteValue = Number.isFinite(value) ? value : min;
+  return Math.min(max, Math.max(min, Math.round(finiteValue)));
+}
+
+function normalizeTimerValues(timer: TimerConfig): TimerConfig {
+  return {
+    ...timer,
+    prepare: normalizeTimerMetric(timer.prepare, 0, 600),
+    work: normalizeTimerMetric(timer.work, 1, 3600),
+    rest: normalizeTimerMetric(timer.rest, 0, 3600),
+    rounds: normalizeTimerMetric(timer.rounds, 1, 99),
+    cycles: normalizeTimerMetric(timer.cycles, 1, 20),
+    cycleRest: normalizeTimerMetric(timer.cycleRest, 0, 3600),
+    cooldown: normalizeTimerMetric(timer.cooldown, 0, 3600),
+  };
+}
+
+function normalizeStoredTimer(value: unknown): TimerConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const timer = value as Record<string, unknown>;
+  const metricKeys = ['prepare', 'work', 'rest', 'rounds', 'cycles', 'cycleRest', 'cooldown'] as const;
+  if (typeof timer.id !== 'string' || !timer.id
+    || typeof timer.name !== 'string'
+    || metricKeys.some((key) => typeof timer[key] !== 'number' || !Number.isFinite(timer[key]))) return null;
+
+  return normalizeTimerValues({
+    id: timer.id,
+    name: timer.name,
+    nameIsCustom: typeof timer.nameIsCustom === 'boolean' ? timer.nameIsCustom : undefined,
+    prepare: timer.prepare as number,
+    work: timer.work as number,
+    rest: timer.rest as number,
+    rounds: timer.rounds as number,
+    cycles: timer.cycles as number,
+    cycleRest: timer.cycleRest as number,
+    cooldown: timer.cooldown as number,
+  });
+}
 
 type Settings = {
   soundEnabled: boolean;
@@ -111,9 +157,11 @@ const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
 const DISPLAY_MESSAGE_MEMORY_STORAGE = 'pulse-display-message-memory-v1';
 const RECENT_TIMERS_STORAGE = 'pulse-recent-timers-v1';
-const WORKOUT_SESSIONS_STORAGE = 'pulse-workout-sessions-v1';
+const WORKOUT_SESSIONS_STORAGE = 'pulse-workout-sessions-v2';
+const LEGACY_WORKOUT_SESSIONS_STORAGE = 'pulse-workout-sessions-v1';
 const HOME_TIMER_LIMIT = 4;
 const RECOVERY_SPEECH_PAUSE_MS = 400;
+const AUDIO_START_LEAD_SECONDS = 0.075;
 
 type ScreenWakeLock = {
   release: () => Promise<void>;
@@ -231,10 +279,11 @@ function formatProgressMinutes(seconds: number) {
 }
 
 function workoutDuration(timer: TimerConfig) {
-  const work = timer.work * timer.rounds * timer.cycles;
-  const roundRests = timer.rest * Math.max(0, timer.rounds - 1) * timer.cycles;
-  const cycleRests = timer.cycleRest * Math.max(0, timer.cycles - 1);
-  return timer.prepare + work + roundRests + cycleRests + timer.cooldown;
+  const normalized = normalizeTimerValues(timer);
+  const work = normalized.work * normalized.rounds * normalized.cycles;
+  const roundRests = normalized.rest * Math.max(0, normalized.rounds - 1) * normalized.cycles;
+  const cycleRests = normalized.cycleRest * Math.max(0, normalized.cycles - 1);
+  return normalized.prepare + work + roundRests + cycleRests + normalized.cooldown;
 }
 
 function selectHomeTimers(timers: TimerConfig[], recentTimerIds: string[]) {
@@ -260,26 +309,27 @@ function selectHomeTimers(timers: TimerConfig[], recentTimerIds: string[]) {
 }
 
 function buildSequence(timer: TimerConfig): WorkoutPhase[] {
+  const normalized = normalizeTimerValues(timer);
   const sequence: WorkoutPhase[] = [];
-  if (timer.prepare > 0) {
-    sequence.push({ kind: 'prepare', duration: timer.prepare, round: 1, cycle: 1 });
+  if (normalized.prepare > 0) {
+    sequence.push({ kind: 'prepare', duration: normalized.prepare, round: 1, cycle: 1 });
   }
 
-  for (let cycle = 1; cycle <= timer.cycles; cycle += 1) {
-    for (let round = 1; round <= timer.rounds; round += 1) {
-      sequence.push({ kind: 'work', duration: timer.work, round, cycle });
-      if (round < timer.rounds && timer.rest > 0) {
-        sequence.push({ kind: 'rest', duration: timer.rest, round, cycle });
+  for (let cycle = 1; cycle <= normalized.cycles; cycle += 1) {
+    for (let round = 1; round <= normalized.rounds; round += 1) {
+      sequence.push({ kind: 'work', duration: normalized.work, round, cycle });
+      if (round < normalized.rounds && normalized.rest > 0) {
+        sequence.push({ kind: 'rest', duration: normalized.rest, round, cycle });
       }
     }
 
-    if (cycle < timer.cycles && timer.cycleRest > 0) {
-      sequence.push({ kind: 'cycleRest', duration: timer.cycleRest, round: timer.rounds, cycle });
+    if (cycle < normalized.cycles && normalized.cycleRest > 0) {
+      sequence.push({ kind: 'cycleRest', duration: normalized.cycleRest, round: normalized.rounds, cycle });
     }
   }
 
-  if (timer.cooldown > 0) {
-    sequence.push({ kind: 'cooldown', duration: timer.cooldown, round: timer.rounds, cycle: timer.cycles });
+  if (normalized.cooldown > 0) {
+    sequence.push({ kind: 'cooldown', duration: normalized.cooldown, round: normalized.rounds, cycle: normalized.cycles });
   }
 
   return sequence;
@@ -359,7 +409,7 @@ function MetricInput({
           value={value}
           onChange={(event) => {
             const next = Number(event.target.value);
-            onChange(Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : min);
+            onChange(Number.isFinite(next) ? normalizeTimerMetric(next, min, max) : min);
           }}
         />
         <span>{unit}</span>
@@ -401,6 +451,12 @@ export default function Home() {
   const [remaining, setRemaining] = useState(DEFAULT_TIMERS[0].prepare);
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [hasWorkoutStarted, setHasWorkoutStarted] = useState(false);
+  const [progressAnnouncement, setProgressAnnouncement] = useState('');
+  const [sessionAdjustment, setSessionAdjustment] = useState({
+    rounds: DEFAULT_TIMERS[0].rounds,
+    cycles: DEFAULT_TIMERS[0].cycles,
+  });
   const [newMilestones, setNewMilestones] = useState<ProgressMilestone[]>([]);
   const [calendarStatus, setCalendarStatus] = useState('');
   const [labsUnlocked, setLabsUnlocked] = useState(false);
@@ -415,23 +471,37 @@ export default function Home() {
   } | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
+  const workoutAudioSchedulerRef = useRef<WorkoutAudioScheduler | null>(null);
+  const workoutTimelineRef = useRef<WorkoutTimeline | null>(null);
   const activeCoachRef = useRef<ActiveCoach | null>(null);
   const coachMemoryRef = useRef<CoachMemory>(createCoachMemory());
   const displayMessageMemoryRef = useRef<DisplayMessageMemory>(createDisplayMessageMemory());
-  const deadlineRef = useRef(0);
   const transitionLockRef = useRef(false);
+  const workoutRunGenerationRef = useRef(0);
+  const finishIntentRef = useRef(false);
+  const resumeAfterFinishDialogRef = useRef(false);
   const lastTickSecondRef = useRef<number | null>(null);
+  const phaseIndexRef = useRef(0);
+  const runningRef = useRef(false);
+  const sequenceRef = useRef<WorkoutPhase[]>([]);
+  const settingsRef = useRef(settings);
   const wakeLockRef = useRef<ScreenWakeLock | null>(null);
   const wakeLockWantedRef = useRef(false);
   const coachSpeechGenerationRef = useRef(0);
   const pendingCoachSpeechTimeoutRef = useRef<number | null>(null);
   const workoutStartedAtRef = useRef<string | null>(null);
   const recordedWorkoutSessionIdRef = useRef<string | null>(null);
+  const adjustSessionDialogRef = useRef<HTMLDialogElement | null>(null);
+  const finishSessionDialogRef = useRef<HTMLDialogElement | null>(null);
   const labsOpeningControlRef = useRef<HTMLButtonElement | null>(null);
   const restoreLabsFocusRef = useRef(false);
   const labsUnlockSequenceRef = useRef<LabsUnlockSequence>(createLabsUnlockSequence());
 
   const sequence = useMemo(() => buildSequence(activeTimer), [activeTimer]);
+  sequenceRef.current = sequence;
+  phaseIndexRef.current = phaseIndex;
+  runningRef.current = running;
+  settingsRef.current = settings;
   const currentPhase = sequence[phaseIndex];
   const nextPhase = sequence[phaseIndex + 1];
   const curatedVoices = useMemo(() => curateVoices(availableVoices, locale), [availableVoices, locale]);
@@ -448,17 +518,24 @@ export default function Home() {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
       const savedRecentTimerIds = window.localStorage.getItem(RECENT_TIMERS_STORAGE);
-      const savedWorkoutSessions = window.localStorage.getItem(WORKOUT_SESSIONS_STORAGE);
+      const savedWorkoutSessions = window.localStorage.getItem(WORKOUT_SESSIONS_STORAGE)
+        ?? window.localStorage.getItem(LEGACY_WORKOUT_SESSIONS_STORAGE);
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE);
       const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
       const labsSettings = readLabsSettings(window.localStorage);
       storedLabsUnlocked = labsSettings.unlocked;
       if (savedTimers) {
-        const parsed = JSON.parse(savedTimers) as TimerConfig[];
-        if (Array.isArray(parsed) && parsed.length > 0) storedTimers = parsed;
+        const parsed = JSON.parse(savedTimers) as unknown;
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.map(normalizeStoredTimer).filter((timer): timer is TimerConfig => timer !== null);
+          if (normalized.length > 0) storedTimers = normalized;
+        }
       } else if (legacyTimers) {
-        const parsed = JSON.parse(legacyTimers) as TimerConfig[];
-        if (Array.isArray(parsed)) storedTimers = migrateLegacyTimers(parsed);
+        const parsed = JSON.parse(legacyTimers) as unknown;
+        if (Array.isArray(parsed)) {
+          const normalized = parsed.map(normalizeStoredTimer).filter((timer): timer is TimerConfig => timer !== null);
+          storedTimers = migrateLegacyTimers(normalized);
+        }
       }
       if (savedRecentTimerIds) {
         const parsed = JSON.parse(savedRecentTimerIds) as unknown;
@@ -569,25 +646,126 @@ export default function Home() {
     }
   }, []);
 
-  const playTone = useCallback(async (frequency: number, duration = 0.11, volumeScale = 1) => {
-    if (!settings.soundEnabled || settings.volume <= 0) return false;
-    const context = await ensureAudio();
-    if (!context) return false;
-
+  const scheduleTone = useCallback((
+    context: AudioContext,
+    frequency: number,
+    duration: number,
+    volumeScale: number,
+    requestedStart: number,
+    volume: number,
+  ): ScheduledAudioHandle => {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    const start = context.currentTime;
+    const start = Math.max(requestedStart, context.currentTime + 0.005);
+    const endsAt = start + duration + 0.02;
     oscillator.type = 'square';
     oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, settings.volume * 0.18 * volumeScale), start + 0.008);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * 0.18 * volumeScale), start + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain);
     gain.connect(context.destination);
     oscillator.start(start);
-    oscillator.stop(start + duration + 0.02);
+    oscillator.stop(endsAt);
+
+    const disconnect = () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    };
+    oscillator.addEventListener('ended', disconnect, { once: true });
+
+    return {
+      endsAt,
+      cancel: () => {
+        try { oscillator.stop(); } catch { /* The tone may have already ended. */ }
+      },
+    };
+  }, []);
+
+  const playTone = useCallback(async (frequency: number, duration = 0.11, volumeScale = 1) => {
+    const currentSettings = settingsRef.current;
+    if (!currentSettings.soundEnabled || currentSettings.volume <= 0) return false;
+    const context = await ensureAudio();
+    if (!context) return false;
+    scheduleTone(
+      context,
+      frequency,
+      duration,
+      volumeScale,
+      context.currentTime + 0.005,
+      currentSettings.volume,
+    );
     return true;
-  }, [ensureAudio, settings.soundEnabled, settings.volume]);
+  }, [ensureAudio, scheduleTone]);
+
+  const scheduleWorkoutAudioEvent = useCallback((
+    context: AudioContext,
+    event: WorkoutTimelineEvent,
+    audioTime: number,
+  ) => {
+    const currentSettings = settingsRef.current;
+    if (!currentSettings.soundEnabled || currentSettings.volume <= 0) return undefined;
+    if (event.kind === 'tick' && !currentSettings.ticking) return undefined;
+
+    if (event.kind === 'tick') {
+      return scheduleTone(context, 1180, 0.035, 0.34, audioTime, currentSettings.volume);
+    }
+
+    if (event.kind === 'complete') {
+      return [
+        scheduleTone(context, 1040, 0.3, 1.2, audioTime, currentSettings.volume),
+        scheduleTone(context, 1240, 0.34, 1.2, audioTime + 0.18, currentSettings.volume),
+      ];
+    }
+
+    const phase = sequenceRef.current[event.phaseIndex];
+    if (!phase) return undefined;
+    const frequencies: Record<PhaseKind, number> = {
+      prepare: 560,
+      work: 920,
+      rest: 330,
+      cycleRest: 460,
+      cooldown: 520,
+    };
+    return scheduleTone(
+      context,
+      frequencies[phase.kind],
+      0.16,
+      1.2,
+      audioTime,
+      currentSettings.volume,
+    );
+  }, [scheduleTone]);
+
+  const stopWorkoutAudio = useCallback((cancelPending = true) => {
+    workoutAudioSchedulerRef.current?.stop({ cancelPending });
+    workoutAudioSchedulerRef.current = null;
+  }, []);
+
+  const startWorkoutAudio = useCallback((
+    timeline: WorkoutTimeline,
+    context: AudioContext,
+    anchorElapsedMs: number,
+    anchorAudioTime: number,
+    includeCurrentPhaseCue = true,
+  ) => {
+    stopWorkoutAudio();
+    const scheduler = new WorkoutAudioScheduler(timeline, {
+      audioNow: () => context.currentTime,
+      clearTimer: (handle) => window.clearInterval(handle as number),
+      schedule: (event, audioTime) => scheduleWorkoutAudioEvent(context, event, audioTime),
+      setTimer: (callback, intervalMs) => window.setInterval(callback, intervalMs),
+    });
+    workoutAudioSchedulerRef.current = scheduler;
+    try {
+      scheduler.start({ anchorAudioTime, anchorElapsedMs, includeCurrentPhaseCue });
+      return scheduler;
+    } catch {
+      scheduler.stop();
+      workoutAudioSchedulerRef.current = null;
+      return null;
+    }
+  }, [scheduleWorkoutAudioEvent, stopWorkoutAudio]);
 
   const playCue = useCallback(async (kind: PhaseKind | 'complete') => {
     const frequencies: Record<PhaseKind | 'complete', number> = {
@@ -662,11 +840,10 @@ export default function Home() {
   ), [activeTimer.cycles, activeTimer.rounds, sequence]);
 
   const announcePhase = useCallback((phase: WorkoutPhase, index: number) => {
-    void playCue(phase.kind);
     const personality = activeCoachRef.current?.personality
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
     return speakCoach(selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale), { interrupt: true });
-  }, [contextForPhase, locale, playCue, settings.coachPersonality, speakCoach]);
+  }, [contextForPhase, locale, settings.coachPersonality, speakCoach]);
 
   const resolveWorkoutCoach = useCallback(() => {
     if (activeCoachRef.current) return activeCoachRef.current;
@@ -728,6 +905,40 @@ export default function Home() {
     document.addEventListener('visibilitychange', restoreWakeLock);
     return () => document.removeEventListener('visibilitychange', restoreWakeLock);
   }, [requestWakeLock]);
+
+  useEffect(() => {
+    const resynchronizeAudio = () => {
+      if (!runningRef.current) return;
+      if (document.visibilityState !== 'visible') {
+        stopWorkoutAudio();
+        return;
+      }
+
+      const timeline = workoutTimelineRef.current;
+      const runGeneration = workoutRunGenerationRef.current;
+      if (!timeline) return;
+      void ensureAudio().then((context) => {
+        if (!context
+          || !runningRef.current
+          || workoutRunGenerationRef.current !== runGeneration
+          || workoutTimelineRef.current !== timeline) return;
+        const leadSeconds = AUDIO_START_LEAD_SECONDS;
+        const futureMonotonicTime = performance.now() + leadSeconds * 1000;
+        const anchorElapsedMs = timeline.elapsedAt(futureMonotonicTime);
+        if (anchorElapsedMs >= timeline.totalMs) return;
+        startWorkoutAudio(
+          timeline,
+          context,
+          anchorElapsedMs,
+          context.currentTime + leadSeconds,
+          false,
+        );
+      });
+    };
+
+    document.addEventListener('visibilitychange', resynchronizeAudio);
+    return () => document.removeEventListener('visibilitychange', resynchronizeAudio);
+  }, [ensureAudio, startWorkoutAudio, stopWorkoutAudio]);
 
   const applyOrientation = useCallback(async (allowRotation: boolean) => {
     try {
@@ -793,31 +1004,41 @@ export default function Home() {
     setNewMilestones(newlyUnlocked);
   }, [activeTimer, settings.weeklyActiveDayGoal, workoutSessions]);
 
-  const finishPhase = useCallback(() => {
-    if (transitionLockRef.current) return;
+  const finishWorkout = useCallback(() => {
+    if (transitionLockRef.current || finishIntentRef.current) return;
     transitionLockRef.current = true;
-    const nextIndex = phaseIndex + 1;
+    workoutTimelineRef.current?.pause(performance.now());
+    const completionWasScheduled = workoutAudioSchedulerRef.current?.hasScheduled('complete') ?? false;
+    stopWorkoutAudio(false);
+    recordCompletedWorkout();
+    runningRef.current = false;
+    phaseIndexRef.current = Math.max(0, sequence.length - 1);
+    lastTickSecondRef.current = 0;
+    setPhaseIndex(phaseIndexRef.current);
+    setRunning(false);
+    setFinished(true);
+    setRemaining(0);
+    if (!completionWasScheduled) void playCue('complete');
+    const personality = activeCoachRef.current?.personality
+      ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+    const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[sequence.length - 1]?.kind === 'cooldown';
+    speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
+    releaseWakeLock();
+    transitionLockRef.current = false;
+  }, [locale, playCue, recordCompletedWorkout, releaseWakeLock, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, stopWorkoutAudio]);
 
-    if (nextIndex >= sequence.length) {
-      recordCompletedWorkout();
-      setRunning(false);
-      setFinished(true);
-      setRemaining(0);
-      void playCue('complete');
-      const personality = activeCoachRef.current?.personality
-        ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-      const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[phaseIndex]?.kind === 'cooldown';
-      speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
-      releaseWakeLock();
-      transitionLockRef.current = false;
-      return;
-    }
-
+  const enterWorkoutPhase = useCallback((nextIndex: number, nextRemaining: number) => {
+    if (transitionLockRef.current || finishIntentRef.current) return;
     const upcoming = sequence[nextIndex];
+    if (!upcoming) return;
+    transitionLockRef.current = true;
+    phaseIndexRef.current = nextIndex;
     setPhaseIndex(nextIndex);
-    setRemaining(upcoming.duration);
-    lastTickSecondRef.current = upcoming.duration;
-    deadlineRef.current = Date.now() + upcoming.duration * 1000;
+    setRemaining(nextRemaining);
+    lastTickSecondRef.current = nextRemaining;
+    if (!workoutAudioSchedulerRef.current?.hasScheduled(`phase-${nextIndex}`)) {
+      void playCue(upcoming.kind);
+    }
     const messageSelection = selectRunnerMessage(upcoming, nextIndex);
     const phaseUtterance = announcePhase(upcoming, nextIndex);
     if (settings.coachPhrasesEnabled && messageSelection) {
@@ -829,45 +1050,99 @@ export default function Home() {
       );
     }
     transitionLockRef.current = false;
-  }, [announcePhase, locale, phaseIndex, playCue, recordCompletedWorkout, releaseWakeLock, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoach, speakCoachAfterPause]);
+  }, [announcePhase, playCue, selectRunnerMessage, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, speakCoachAfterPause]);
 
   useEffect(() => {
-    if (!running || !currentPhase) return;
-    const interval = window.setInterval(() => {
-      const millisecondsLeft = deadlineRef.current - Date.now();
-      const nextRemaining = Math.max(0, Math.ceil(millisecondsLeft / 1000));
+    if (!running) return;
+    const synchronize = () => {
+      const timeline = workoutTimelineRef.current;
+      if (!timeline) return;
+      const snapshot = timeline.snapshot(performance.now());
 
+      if (snapshot.finished) {
+        finishWorkout();
+        return;
+      }
+
+      if (snapshot.phaseIndex !== phaseIndexRef.current) {
+        enterWorkoutPhase(snapshot.phaseIndex, snapshot.remainingSeconds);
+        return;
+      }
+
+      const nextRemaining = snapshot.remainingSeconds;
       if (nextRemaining !== lastTickSecondRef.current) {
         lastTickSecondRef.current = nextRemaining;
         setRemaining(nextRemaining);
-        if (nextRemaining > 0 && settings.ticking) {
-          void playTone(1180, 0.035, 0.34);
-        }
-        if ((currentPhase.kind === 'prepare' || currentPhase.kind === 'work' || currentPhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
+        const timelinePhase = sequence[snapshot.phaseIndex];
+        if ((timelinePhase.kind === 'prepare' || timelinePhase.kind === 'work' || timelinePhase.kind === 'rest') && nextRemaining > 0 && nextRemaining <= 3) {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoach(makeCountdownSpeech(personality, nextRemaining));
         }
-        if (settings.voiceEnabled && settings.coachPhrasesEnabled && currentPhase.kind === 'work') {
+        if (settings.voiceEnabled && settings.coachPhrasesEnabled && timelinePhase.kind === 'work') {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
-          const context = contextForPhase(currentPhase, phaseIndex, nextRemaining);
+          const context = contextForPhase(timelinePhase, snapshot.phaseIndex, nextRemaining);
           const plan = planCoachIntervention(personality, context, coachMemoryRef.current, { locale });
           coachMemoryRef.current = plan.memory;
           if (plan.speech) speakCoach(plan.speech);
         }
       }
+    };
 
-      if (millisecondsLeft <= 0) finishPhase();
-    }, 100);
+    synchronize();
+    const interval = window.setInterval(synchronize, 100);
 
     return () => window.clearInterval(interval);
-  }, [contextForPhase, currentPhase, finishPhase, locale, phaseIndex, playTone, running, settings.coachPersonality, settings.coachPhrasesEnabled, settings.ticking, settings.voiceEnabled, speakCoach]);
+  }, [contextForPhase, enterWorkoutPhase, finishWorkout, locale, running, sequence, settings.coachPersonality, settings.coachPhrasesEnabled, settings.voiceEnabled, speakCoach]);
 
   useEffect(() => () => {
+    stopWorkoutAudio();
     releaseWakeLock();
     cancelCoachSpeech();
-  }, [cancelCoachSpeech, releaseWakeLock]);
+  }, [cancelCoachSpeech, releaseWakeLock, stopWorkoutAudio]);
+
+  const pauseWorkoutTiming = useCallback((): WorkoutTimelineSnapshot | null => {
+    const timeline = workoutTimelineRef.current;
+    if (!timeline) return null;
+    const snapshot = timeline.pause(performance.now());
+    stopWorkoutAudio();
+    runningRef.current = false;
+    phaseIndexRef.current = snapshot.phaseIndex;
+    lastTickSecondRef.current = snapshot.remainingSeconds;
+    setPhaseIndex(snapshot.phaseIndex);
+    setRemaining(snapshot.remainingSeconds);
+    return snapshot;
+  }, [stopWorkoutAudio]);
+
+  const openAdjustSessionDialog = () => {
+    if (hasWorkoutStarted || finished) return;
+    setSessionAdjustment({ rounds: activeTimer.rounds, cycles: activeTimer.cycles });
+    window.requestAnimationFrame(() => {
+      if (!adjustSessionDialogRef.current?.open) adjustSessionDialogRef.current?.showModal();
+    });
+  };
+
+  const applySessionAdjustment = () => {
+    if (hasWorkoutStarted || finished) return;
+    const adjustedTimer: TimerConfig = {
+      ...activeTimer,
+      rounds: Math.min(99, Math.max(1, Math.round(sessionAdjustment.rounds))),
+      cycles: Math.min(20, Math.max(1, Math.round(sessionAdjustment.cycles))),
+    };
+    if (adjustedTimer.nameIsCustom === false) adjustedTimer.name = generatedTimerName(adjustedTimer);
+    const adjustedSequence = buildSequence(adjustedTimer);
+    stopWorkoutAudio();
+    workoutTimelineRef.current = new WorkoutTimeline(adjustedSequence);
+    sequenceRef.current = adjustedSequence;
+    phaseIndexRef.current = 0;
+    setActiveTimer(adjustedTimer);
+    setPhaseIndex(0);
+    setRemaining(adjustedSequence[0]?.duration ?? 0);
+    lastTickSecondRef.current = adjustedSequence[0]?.duration ?? 0;
+    setRunnerMessageSelection(null);
+    adjustSessionDialogRef.current?.close();
+  };
 
   const openEditor = (timer?: TimerConfig, origin?: ReturnScreen) => {
     const destination = origin ?? (screen === 'library' ? 'library' : 'home');
@@ -901,12 +1176,7 @@ export default function Home() {
   };
 
   const saveTimer = () => {
-    const normalizedDraft = {
-      ...draft,
-      work: Math.max(1, draft.work),
-      rounds: Math.max(1, draft.rounds),
-      cycles: Math.max(1, draft.cycles),
-    };
+    const normalizedDraft = normalizeTimerValues(draft);
     const customName = normalizedDraft.name.trim();
     const automaticName = generatedTimerName(normalizedDraft);
     const localizedAutomaticName = localizeTimerName({ ...normalizedDraft, nameIsCustom: false }, copy);
@@ -950,54 +1220,107 @@ export default function Home() {
   };
 
   const beginWorkout = (timer: TimerConfig) => {
-    const firstSequence = buildSequence(timer);
-    setRecentTimerIds((current) => [timer.id, ...current.filter((id) => id !== timer.id)].slice(0, HOME_TIMER_LIMIT));
+    const normalizedTimer = normalizeTimerValues(timer);
+    const firstSequence = buildSequence(normalizedTimer);
+    stopWorkoutAudio();
+    workoutTimelineRef.current = new WorkoutTimeline(firstSequence);
+    sequenceRef.current = firstSequence;
+    phaseIndexRef.current = 0;
+    runningRef.current = false;
+    setRecentTimerIds((current) => [normalizedTimer.id, ...current.filter((id) => id !== normalizedTimer.id)].slice(0, HOME_TIMER_LIMIT));
+    workoutRunGenerationRef.current += 1;
+    finishIntentRef.current = false;
+    resumeAfterFinishDialogRef.current = false;
     workoutStartedAtRef.current = null;
     recordedWorkoutSessionIdRef.current = null;
+    transitionLockRef.current = false;
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
     setNewMilestones([]);
-    setActiveTimer(timer);
+    setActiveTimer(normalizedTimer);
+    setSessionAdjustment({ rounds: normalizedTimer.rounds, cycles: normalizedTimer.cycles });
     setPhaseIndex(0);
     setRemaining(firstSequence[0]?.duration ?? 0);
     lastTickSecondRef.current = firstSequence[0]?.duration ?? 0;
     setRunning(false);
     setFinished(false);
+    setHasWorkoutStarted(false);
     setScreen('runner');
     void applyOrientation(settings.rotation);
   };
 
   const toggleWorkout = async () => {
     if (finished) {
+      stopWorkoutAudio();
+      workoutTimelineRef.current = new WorkoutTimeline(sequence);
+      workoutRunGenerationRef.current += 1;
+      finishIntentRef.current = false;
+      resumeAfterFinishDialogRef.current = false;
       workoutStartedAtRef.current = null;
       recordedWorkoutSessionIdRef.current = null;
       activeCoachRef.current = null;
       coachMemoryRef.current = createCoachMemory();
       setRunnerMessageSelection(null);
       setNewMilestones([]);
+      phaseIndexRef.current = 0;
+      runningRef.current = false;
       setPhaseIndex(0);
       setRemaining(sequence[0]?.duration ?? 0);
       lastTickSecondRef.current = sequence[0]?.duration ?? 0;
       setFinished(false);
+      setHasWorkoutStarted(false);
       return;
     }
 
     if (running) {
-      setRemaining(Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)));
+      workoutRunGenerationRef.current += 1;
+      const snapshot = pauseWorkoutTiming();
+      if (snapshot?.finished) {
+        finishWorkout();
+        return;
+      }
       setRunning(false);
       cancelCoachSpeech();
       releaseWakeLock();
     } else {
-      await ensureAudio();
-      if (!workoutStartedAtRef.current) workoutStartedAtRef.current = new Date().toISOString();
+      const runGeneration = workoutRunGenerationRef.current + 1;
+      workoutRunGenerationRef.current = runGeneration;
+      finishIntentRef.current = false;
+      setHasWorkoutStarted(true);
+      const audioContext = await ensureAudio();
+      if (workoutRunGenerationRef.current !== runGeneration || finishIntentRef.current) return;
+      if (!workoutStartedAtRef.current) {
+        workoutStartedAtRef.current = new Date().toISOString();
+      }
       resolveWorkoutCoach();
-      deadlineRef.current = Date.now() + remaining * 1000;
-      lastTickSecondRef.current = remaining;
+      const timeline = workoutTimelineRef.current ?? new WorkoutTimeline(sequence);
+      workoutTimelineRef.current = timeline;
+      const pausedSnapshot = timeline.snapshot(performance.now());
+      phaseIndexRef.current = pausedSnapshot.phaseIndex;
+      lastTickSecondRef.current = pausedSnapshot.remainingSeconds;
+      setPhaseIndex(pausedSnapshot.phaseIndex);
+      setRemaining(pausedSnapshot.remainingSeconds);
+      const leadSeconds = audioContext ? AUDIO_START_LEAD_SECONDS : 0;
+      const monotonicStartMs = performance.now() + leadSeconds * 1000;
+      timeline.start(monotonicStartMs);
+      const scheduler = audioContext
+        ? startWorkoutAudio(
+          timeline,
+          audioContext,
+          pausedSnapshot.elapsedMs,
+          audioContext.currentTime + leadSeconds,
+        )
+        : null;
+      runningRef.current = true;
       setRunning(true);
-      if (currentPhase) {
-        const phaseUtterance = announcePhase(currentPhase, phaseIndex);
-        if (settings.coachPhrasesEnabled && runnerMessageSelection?.phaseIndex === phaseIndex) {
+      const resumedPhase = sequence[pausedSnapshot.phaseIndex];
+      if (resumedPhase) {
+        if (!scheduler?.hasScheduled(`current-phase-${pausedSnapshot.phaseIndex}`)) {
+          void playCue(resumedPhase.kind);
+        }
+        const phaseUtterance = announcePhase(resumedPhase, pausedSnapshot.phaseIndex);
+        if (settings.coachPhrasesEnabled && runnerMessageSelection?.phaseIndex === pausedSnapshot.phaseIndex) {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoachAfterPause(
@@ -1011,10 +1334,21 @@ export default function Home() {
   };
 
   const resetWorkout = () => {
+    stopWorkoutAudio();
+    workoutTimelineRef.current = new WorkoutTimeline(sequence);
+    workoutRunGenerationRef.current += 1;
+    finishIntentRef.current = false;
+    resumeAfterFinishDialogRef.current = false;
+    adjustSessionDialogRef.current?.close();
+    finishSessionDialogRef.current?.close();
     workoutStartedAtRef.current = null;
     recordedWorkoutSessionIdRef.current = null;
+    transitionLockRef.current = false;
+    phaseIndexRef.current = 0;
+    runningRef.current = false;
     setRunning(false);
     setFinished(false);
+    setHasWorkoutStarted(false);
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
@@ -1026,10 +1360,20 @@ export default function Home() {
     releaseWakeLock();
   };
 
-  const leaveWorkout = () => {
+  const exitWorkout = () => {
+    stopWorkoutAudio();
+    workoutTimelineRef.current = null;
+    workoutRunGenerationRef.current += 1;
+    finishIntentRef.current = false;
+    resumeAfterFinishDialogRef.current = false;
+    adjustSessionDialogRef.current?.close();
+    finishSessionDialogRef.current?.close();
     workoutStartedAtRef.current = null;
     recordedWorkoutSessionIdRef.current = null;
+    transitionLockRef.current = false;
+    runningRef.current = false;
     setRunning(false);
+    setHasWorkoutStarted(false);
     activeCoachRef.current = null;
     coachMemoryRef.current = createCoachMemory();
     setRunnerMessageSelection(null);
@@ -1038,6 +1382,91 @@ export default function Home() {
     releaseWakeLock();
     try { screenOrientation().unlock?.(); } catch { /* no-op */ }
     setScreen('home');
+  };
+
+  const openFinishSessionDialog = () => {
+    if (!hasWorkoutStarted || finished) return;
+    workoutRunGenerationRef.current += 1;
+    finishIntentRef.current = true;
+    resumeAfterFinishDialogRef.current = running;
+    if (running) {
+      const snapshot = pauseWorkoutTiming();
+      if (snapshot?.finished) {
+        finishIntentRef.current = false;
+        finishWorkout();
+        return;
+      }
+      setRunning(false);
+      cancelCoachSpeech();
+      releaseWakeLock();
+    }
+    window.requestAnimationFrame(() => {
+      if (!finishSessionDialogRef.current?.open) finishSessionDialogRef.current?.showModal();
+    });
+  };
+
+  const continueWorkoutAfterFinishDialog = () => {
+    const shouldResume = resumeAfterFinishDialogRef.current;
+    resumeAfterFinishDialogRef.current = false;
+    finishIntentRef.current = false;
+    finishSessionDialogRef.current?.close();
+    if (shouldResume) window.requestAnimationFrame(() => { void toggleWorkout(); });
+  };
+
+  const saveStoppedWorkout = () => {
+    const stoppedRemaining = remaining
+      + sequence.slice(phaseIndex + 1).reduce((sum, phase) => sum + phase.duration, 0);
+    const stoppedElapsed = sequence.reduce((sum, phase) => sum + phase.duration, 0) - stoppedRemaining;
+    const stoppedMetrics = calculateWorkoutSessionMetrics(
+      activeTimer,
+      stoppedElapsed,
+    );
+    if (stoppedMetrics.totalSeconds <= 0 || recordedWorkoutSessionIdRef.current) return;
+    const stoppedAt = new Date();
+    const storedStart = workoutStartedAtRef.current
+      ? new Date(workoutStartedAtRef.current)
+      : new Date(stoppedAt.getTime() - stoppedMetrics.totalSeconds * 1000);
+    const startedAt = Number.isFinite(storedStart.getTime())
+      ? storedStart
+      : new Date(stoppedAt.getTime() - stoppedMetrics.totalSeconds * 1000);
+    const session = createStoppedWorkoutSession(
+      activeTimer,
+      startedAt,
+      stoppedMetrics.totalSeconds,
+      stoppedAt,
+    );
+
+    transitionLockRef.current = true;
+    stopWorkoutAudio();
+    workoutTimelineRef.current = null;
+    workoutRunGenerationRef.current += 1;
+    finishIntentRef.current = true;
+    resumeAfterFinishDialogRef.current = false;
+    recordedWorkoutSessionIdRef.current = session.id;
+    runningRef.current = false;
+    finishSessionDialogRef.current?.close();
+    setWorkoutSessions((current) => [session, ...current]);
+    setRunning(false);
+    setFinished(false);
+    setHasWorkoutStarted(false);
+    setRunnerMessageSelection(null);
+    setNewMilestones([]);
+    workoutStartedAtRef.current = null;
+    activeCoachRef.current = null;
+    coachMemoryRef.current = createCoachMemory();
+    cancelCoachSpeech();
+    releaseWakeLock();
+    try { screenOrientation().unlock?.(); } catch { /* no-op */ }
+    setProgressAnnouncement(copy.runner.partialSessionSaved);
+    setScreen('progress');
+  };
+
+  const leaveWorkout = () => {
+    if (hasWorkoutStarted && !finished) {
+      openFinishSessionDialog();
+      return;
+    }
+    exitWorkout();
   };
 
   const openSettings = (origin: ReturnScreen) => {
@@ -1155,6 +1584,7 @@ export default function Home() {
   const workoutProgress = totalDuration > 0
     ? Math.min(1, Math.max(0, (totalDuration - totalRemaining) / totalDuration))
     : finished ? 1 : 0;
+  const executionMetrics = calculateWorkoutSessionMetrics(activeTimer, totalDuration - totalRemaining);
 
   const currentMessageKind: DisplayMessageKind | null = currentPhase?.kind === 'rest' || currentPhase?.kind === 'cycleRest'
     ? 'motivation'
@@ -1490,13 +1920,14 @@ export default function Home() {
     return (
       <ProgressScreen
         sessions={workoutSessions}
-        onHome={() => setScreen('home')}
-        onTimers={() => setScreen('library')}
-        onSettings={() => openSettings('progress')}
+        onHome={() => { setProgressAnnouncement(''); setScreen('home'); }}
+        onTimers={() => { setProgressAnnouncement(''); setScreen('library'); }}
+        onSettings={() => { setProgressAnnouncement(''); openSettings('progress'); }}
         onDeleteSession={deleteWorkoutSession}
         weeklyGoal={settings.weeklyActiveDayGoal}
         locale={locale}
         sessionTimerName={(session) => displayWorkoutSessionTimerName(session, copy)}
+        announcement={progressAnnouncement}
       />
     );
   }
@@ -1504,6 +1935,7 @@ export default function Home() {
   if (screen === 'runner') {
     const phaseKind = finished ? 'complete' : currentPhase?.kind ?? 'prepare';
     const phaseClass = phaseKind === 'complete' ? 'complete' : phaseKind;
+    const adjustedTimerPreview = { ...activeTimer, ...sessionAdjustment };
     return (
       <main className={`runner-screen phase-${phaseClass}`}>
         <header className="runner-header">
@@ -1601,12 +2033,85 @@ export default function Home() {
 
         <section className="runner-controls">
           <div className="runner-stat"><strong>{finished ? activeTimer.rounds : currentPhase?.round ?? 1}</strong><span>{copy.runner.round} / {activeTimer.rounds}</span></div>
-          <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? copy.runner.restartWorkout : running ? copy.runner.pauseWorkout : copy.runner.startWorkout}>
-            <span>{finished ? <AppIcon name="reset" size={34} /> : running ? <PauseGlyph /> : <PlayGlyph />}</span>
-            <small>{finished ? copy.runner.again : running ? copy.runner.pause : phaseIndex === 0 && remaining === sequence[0]?.duration ? copy.runner.start : copy.runner.resume}</small>
-          </button>
+          <div className="runner-control-center">
+            <button className={`main-control ${running ? 'is-running' : ''}`} onClick={() => { void toggleWorkout(); }} aria-label={finished ? copy.runner.restartWorkout : running ? copy.runner.pauseWorkout : hasWorkoutStarted ? copy.runner.resume : copy.runner.startWorkout}>
+              <span>{finished ? <AppIcon name="reset" size={34} /> : running ? <PauseGlyph /> : <PlayGlyph />}</span>
+              <small>{finished ? copy.runner.again : running ? copy.runner.pause : hasWorkoutStarted ? copy.runner.resume : copy.runner.start}</small>
+            </button>
+            {!finished && !hasWorkoutStarted && (
+              <button className="runner-secondary-action" onClick={openAdjustSessionDialog}>{copy.runner.adjustSession}</button>
+            )}
+            {!finished && hasWorkoutStarted && !running && (
+              <button className="runner-secondary-action danger" onClick={openFinishSessionDialog}>{copy.runner.finishSession}</button>
+            )}
+          </div>
           <div className="runner-stat"><strong>{finished ? activeTimer.cycles : currentPhase?.cycle ?? 1}</strong><span>{copy.runner.cycle} / {activeTimer.cycles}</span></div>
         </section>
+
+        <dialog
+          className="runner-dialog"
+          ref={adjustSessionDialogRef}
+          aria-labelledby="adjust-session-title"
+          aria-describedby="adjust-session-helper"
+        >
+          <form className="runner-dialog-content" onSubmit={(event) => { event.preventDefault(); applySessionAdjustment(); }}>
+            <header>
+              <p className="eyebrow">{copy.runner.adjustSession}</p>
+              <h2 id="adjust-session-title">{copy.runner.adjustSessionTitle}</h2>
+              <p id="adjust-session-helper">{copy.runner.adjustSessionHelper}</p>
+            </header>
+            <div className="metric-list">
+              <MetricInput
+                label={copy.runner.adjustSessionRounds}
+                helper={copy.editor.roundsHelper}
+                value={sessionAdjustment.rounds}
+                unit="×"
+                min={1}
+                max={99}
+                onChange={(rounds) => setSessionAdjustment((current) => ({ ...current, rounds }))}
+              />
+              <MetricInput
+                label={copy.runner.adjustSessionCycles}
+                helper={copy.editor.cyclesHelper(sessionAdjustment.rounds)}
+                value={sessionAdjustment.cycles}
+                unit="×"
+                min={1}
+                max={20}
+                onChange={(cycles) => setSessionAdjustment((current) => ({ ...current, cycles }))}
+              />
+            </div>
+            <strong className="runner-dialog-summary" aria-live="polite">{copy.runner.adjustSessionEstimatedDuration(formatTime(workoutDuration(adjustedTimerPreview)))}</strong>
+            <div className="runner-dialog-actions">
+              <button type="button" className="secondary" onClick={() => adjustSessionDialogRef.current?.close()}>{copy.runner.cancelSessionAdjustments}</button>
+              <button type="submit" className="primary">{copy.runner.applySessionAdjustments}</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog
+          className="runner-dialog"
+          ref={finishSessionDialogRef}
+          aria-labelledby="finish-session-title"
+          aria-describedby="finish-session-progress"
+          onCancel={(event) => { event.preventDefault(); continueWorkoutAfterFinishDialog(); }}
+        >
+          <div className="runner-dialog-content">
+            <header>
+              <p className="eyebrow">{copy.runner.finishSession}</p>
+              <h2 id="finish-session-title">{copy.runner.finishSessionTitle}</h2>
+              <p id="finish-session-progress">{copy.runner.finishSessionProgress(
+                executionMetrics.completedWorkIntervals,
+                executionMetrics.plannedWorkIntervals,
+                formatTime(executionMetrics.totalSeconds),
+              )}</p>
+            </header>
+            <div className="runner-dialog-actions finish-actions">
+              <button type="button" className="secondary" onClick={continueWorkoutAfterFinishDialog}>{copy.runner.continueSession}</button>
+              <button type="button" className="primary" disabled={executionMetrics.totalSeconds <= 0} onClick={saveStoppedWorkout}>{copy.runner.savePartialSession}</button>
+              <button type="button" className="danger" onClick={exitWorkout}>{copy.runner.discardSession}</button>
+            </div>
+          </div>
+        </dialog>
       </main>
     );
   }

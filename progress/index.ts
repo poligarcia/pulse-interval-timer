@@ -2,6 +2,8 @@ export {
   DEFAULT_WEEKLY_ACTIVE_DAY_GOAL,
   calculateProgressStreaks,
   calculateProgressMilestones,
+  calculateWorkoutSessionMetrics,
+  createStoppedWorkoutSession,
   createWorkoutSession,
   groupWorkoutHistory,
   localDateKey,
@@ -19,5 +21,7 @@ export type {
   WorkoutHistoryDay,
   WorkoutHistoryMonth,
   WorkoutSession,
+  WorkoutSessionMetrics,
+  WorkoutSessionStatus,
   WorkoutTimerSnapshot,
 } from './types.ts';

@@ -11,17 +11,28 @@ export type WorkoutTimerSnapshot = {
   cooldown: number;
 };
 
-export type WorkoutSession = {
-  schemaVersion: 1;
+export type WorkoutSessionStatus = 'completed' | 'stopped';
+
+export type WorkoutSessionMetrics = {
+  /** Scheduled workout time that was actually consumed, excluding time spent paused. */
+  totalSeconds: number;
+  /** Time actually consumed inside work intervals, including a partially completed interval. */
+  activeWorkSeconds: number;
+  completedWorkIntervals: number;
+  plannedWorkIntervals: number;
+  plannedTotalSeconds: number;
+};
+
+export type WorkoutSession = WorkoutSessionMetrics & {
+  schemaVersion: 2;
   id: string;
   timerId: string;
   timerName: string;
+  status: WorkoutSessionStatus;
   startedAt: string;
   completedAt: string;
   localDate: string;
   timezoneOffsetMinutes: number;
-  totalSeconds: number;
-  activeWorkSeconds: number;
   rounds: number;
   cycles: number;
   timerSnapshot: WorkoutTimerSnapshot;

@@ -126,6 +126,8 @@ export type AppMessages = {
     chooseTimer: string;
     trainingAndActive: (training: string, active: string) => string;
     roundsAndCycles: (rounds: number, cycles: number) => string;
+    partialSession: string;
+    intervalProgress: (completed: number, planned: number) => string;
     delete: string;
     deleteFromHistory: (name: string) => string;
     durationSeconds: (seconds: number) => string;
@@ -150,6 +152,21 @@ export type AppMessages = {
     upNext: string;
     total: (time: string) => string;
     finish: string;
+    adjustSession: string;
+    adjustSessionTitle: string;
+    adjustSessionRounds: string;
+    adjustSessionCycles: string;
+    adjustSessionEstimatedDuration: (time: string) => string;
+    adjustSessionHelper: string;
+    applySessionAdjustments: string;
+    cancelSessionAdjustments: string;
+    finishSession: string;
+    finishSessionTitle: string;
+    finishSessionProgress: (completed: number, planned: number, duration: string) => string;
+    continueSession: string;
+    savePartialSession: string;
+    partialSessionSaved: string;
+    discardSession: string;
     workoutProgress: (round: number, rounds: number, cycle: number, cycles: number) => string;
     round: string;
     cycle: string;
@@ -319,7 +336,7 @@ const en: AppMessages = {
     eyebrow: 'YOUR TRAINING',
     period: { day: 'Today', week: 'This week', month: 'This month' },
     periodAria: 'Progress period', minutesUnit: 'MIN',
-    activeWorkAcross: (duration, workouts) => `${duration} active work across ${workouts} ${workouts === 1 ? 'workout' : 'workouts'}.`,
+    activeWorkAcross: (duration, workouts) => `${duration} active work across ${workouts} ${workouts === 1 ? 'session' : 'sessions'}.`,
     activityKicker: 'ACTIVITY', trainingRhythm: 'Training rhythm',
     activeDays: (count) => `${count} active ${count === 1 ? 'day' : 'days'}`,
     consistencyKicker: 'CONSISTENCY', keepShowingUp: 'Keep showing up', activeDayStreak: 'active-day streak',
@@ -341,9 +358,11 @@ const en: AppMessages = {
     journalKicker: 'JOURNAL', workoutHistory: 'Workout history',
     sessions: (count) => `${count} ${count === 1 ? 'session' : 'sessions'}`,
     emptyTitle: 'Your first workout starts the story.',
-    emptyBody: 'Complete a timer and Pulse will add it here automatically.', chooseTimer: 'Choose a timer',
+    emptyBody: 'Finish a timer or save a partial session and Pulse will add it here.', chooseTimer: 'Choose a timer',
     trainingAndActive: (training, active) => `${training} training · ${active} active`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
+    partialSession: 'Partial',
+    intervalProgress: (completed, planned) => `${completed}/${planned} ${planned === 1 ? 'interval' : 'intervals'}`,
     delete: 'Delete', deleteFromHistory: (name) => `Delete ${name} from history`,
     durationSeconds: (seconds) => `${seconds}s`, durationMinutes: (minutes) => `${minutes} min`,
     durationHours: (hours, minutes) => minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`,
@@ -356,6 +375,14 @@ const en: AppMessages = {
     viewProgress: 'View progress', sessionComplete: 'Session complete', stageProgress: (stage) => `${stage} progress`,
     session: 'Session', currentStage: 'Current stage', workout: 'Workout', upNext: 'Up next',
     total: (time) => `${time} total`, finish: 'Finish',
+    adjustSession: 'Adjust this session', adjustSessionTitle: 'Adjust this session',
+    adjustSessionRounds: 'Rounds', adjustSessionCycles: 'Cycles',
+    adjustSessionEstimatedDuration: (time) => `Estimated duration · ${time}`,
+    adjustSessionHelper: 'Changes apply only to this session. Your saved timer won’t be modified.',
+    applySessionAdjustments: 'Apply changes', cancelSessionAdjustments: 'Cancel',
+    finishSession: 'End session', finishSessionTitle: 'End this session?',
+    finishSessionProgress: (completed, planned, duration) => `You’ve completed ${completed} of ${planned} ${planned === 1 ? 'interval' : 'intervals'} · ${duration} of training.`,
+    continueSession: 'Continue', savePartialSession: 'Save what I did', partialSessionSaved: 'Partial session saved.', discardSession: 'Discard',
     workoutProgress: (round, rounds, cycle, cycles) => `Workout progress. Round ${round} of ${rounds}, cycle ${cycle} of ${cycles}.`,
     round: 'Round', cycle: 'Cycle', restartWorkout: 'Restart workout', pauseWorkout: 'Pause workout',
     startWorkout: 'Start workout', again: 'Again', pause: 'Pause', start: 'Start', resume: 'Resume',
@@ -486,7 +513,7 @@ const esAR: AppMessages = {
     eyebrow: 'TU ENTRENAMIENTO',
     period: { day: 'Hoy', week: 'Esta semana', month: 'Este mes' },
     periodAria: 'Período de progreso', minutesUnit: 'MIN',
-    activeWorkAcross: (duration, workouts) => `${duration} de trabajo activo en ${workouts} ${workouts === 1 ? 'entrenamiento' : 'entrenamientos'}.`,
+    activeWorkAcross: (duration, workouts) => `${duration} de trabajo activo en ${workouts} ${workouts === 1 ? 'sesión' : 'sesiones'}.`,
     activityKicker: 'ACTIVIDAD', trainingRhythm: 'Ritmo de entrenamiento',
     activeDays: (count) => `${count} ${count === 1 ? 'día activo' : 'días activos'}`,
     consistencyKicker: 'CONSTANCIA', keepShowingUp: 'Seguí apareciendo', activeDayStreak: 'racha de días activos',
@@ -508,9 +535,11 @@ const esAR: AppMessages = {
     journalKicker: 'REGISTRO', workoutHistory: 'Historial de entrenamientos',
     sessions: (count) => `${count} ${count === 1 ? 'sesión' : 'sesiones'}`,
     emptyTitle: 'Tu primer entrenamiento empieza la historia.',
-    emptyBody: 'Completá un timer y Pulse lo agregará acá automáticamente.', chooseTimer: 'Elegir un timer',
+    emptyBody: 'Completá un timer o guardá una sesión parcial y Pulse la agregará acá.', chooseTimer: 'Elegir un timer',
     trainingAndActive: (training, active) => `${training} de entrenamiento · ${active} activos`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
+    partialSession: 'Parcial',
+    intervalProgress: (completed, planned) => `${completed}/${planned} ${planned === 1 ? 'intervalo' : 'intervalos'}`,
     delete: 'Eliminar', deleteFromHistory: (name) => `Eliminar ${name} del historial`,
     durationSeconds: (seconds) => `${seconds}s`, durationMinutes: (minutes) => `${minutes} min`,
     durationHours: (hours, minutes) => minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`,
@@ -523,6 +552,14 @@ const esAR: AppMessages = {
     viewProgress: 'Ver progreso', sessionComplete: 'Sesión completada', stageProgress: (stage) => `Progreso de ${stage}`,
     session: 'Sesión', currentStage: 'Etapa actual', workout: 'Entrenamiento', upNext: 'A continuación',
     total: (time) => `${time} en total`, finish: 'Finalizar',
+    adjustSession: 'Ajustar esta sesión', adjustSessionTitle: 'Ajustar esta sesión',
+    adjustSessionRounds: 'Rondas', adjustSessionCycles: 'Ciclos',
+    adjustSessionEstimatedDuration: (time) => `Duración estimada · ${time}`,
+    adjustSessionHelper: 'Los cambios se aplican solo a esta sesión. El timer guardado no se modificará.',
+    applySessionAdjustments: 'Aplicar cambios', cancelSessionAdjustments: 'Cancelar',
+    finishSession: 'Finalizar sesión', finishSessionTitle: '¿Finalizar esta sesión?',
+    finishSessionProgress: (completed, planned, duration) => `Completaste ${completed} de ${planned} ${planned === 1 ? 'intervalo' : 'intervalos'} · ${duration} de entrenamiento.`,
+    continueSession: 'Continuar', savePartialSession: 'Guardar lo realizado', partialSessionSaved: 'Sesión parcial guardada.', discardSession: 'Descartar',
     workoutProgress: (round, rounds, cycle, cycles) => `Progreso del entrenamiento. Ronda ${round} de ${rounds}, ciclo ${cycle} de ${cycles}.`,
     round: 'Ronda', cycle: 'Ciclo', restartWorkout: 'Reiniciar entrenamiento', pauseWorkout: 'Pausar entrenamiento',
     startWorkout: 'Iniciar entrenamiento', again: 'De nuevo', pause: 'Pausar', start: 'Empezar', resume: 'Continuar',
@@ -653,7 +690,7 @@ const ptBR: AppMessages = {
     eyebrow: 'SEU TREINO',
     period: { day: 'Hoje', week: 'Esta semana', month: 'Este mês' },
     periodAria: 'Período de progresso', minutesUnit: 'MIN',
-    activeWorkAcross: (duration, workouts) => `${duration} de trabalho ativo em ${workouts} ${workouts === 1 ? 'treino' : 'treinos'}.`,
+    activeWorkAcross: (duration, workouts) => `${duration} de trabalho ativo em ${workouts} ${workouts === 1 ? 'sessão' : 'sessões'}.`,
     activityKicker: 'ATIVIDADE', trainingRhythm: 'Ritmo de treino',
     activeDays: (count) => `${count} ${count === 1 ? 'dia ativo' : 'dias ativos'}`,
     consistencyKicker: 'CONSISTÊNCIA', keepShowingUp: 'Continue presente', activeDayStreak: 'sequência de dias ativos',
@@ -675,9 +712,11 @@ const ptBR: AppMessages = {
     journalKicker: 'REGISTRO', workoutHistory: 'Histórico de treinos',
     sessions: (count) => `${count} ${count === 1 ? 'sessão' : 'sessões'}`,
     emptyTitle: 'Seu primeiro treino começa a história.',
-    emptyBody: 'Conclua um timer e o Pulse vai adicioná-lo aqui automaticamente.', chooseTimer: 'Escolher um timer',
+    emptyBody: 'Conclua um timer ou salve uma sessão parcial e o Pulse vai adicioná-la aqui.', chooseTimer: 'Escolher um timer',
     trainingAndActive: (training, active) => `${training} de treino · ${active} ativos`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
+    partialSession: 'Parcial',
+    intervalProgress: (completed, planned) => `${completed}/${planned} ${planned === 1 ? 'intervalo' : 'intervalos'}`,
     delete: 'Excluir', deleteFromHistory: (name) => `Excluir ${name} do histórico`,
     durationSeconds: (seconds) => `${seconds}s`, durationMinutes: (minutes) => `${minutes} min`,
     durationHours: (hours, minutes) => minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`,
@@ -690,6 +729,14 @@ const ptBR: AppMessages = {
     viewProgress: 'Ver progresso', sessionComplete: 'Sessão concluída', stageProgress: (stage) => `Progresso de ${stage}`,
     session: 'Sessão', currentStage: 'Etapa atual', workout: 'Treino', upNext: 'A seguir',
     total: (time) => `${time} no total`, finish: 'Finalizar',
+    adjustSession: 'Ajustar esta sessão', adjustSessionTitle: 'Ajustar esta sessão',
+    adjustSessionRounds: 'Rodadas', adjustSessionCycles: 'Ciclos',
+    adjustSessionEstimatedDuration: (time) => `Duração estimada · ${time}`,
+    adjustSessionHelper: 'As alterações valem somente para esta sessão. O timer salvo não será alterado.',
+    applySessionAdjustments: 'Aplicar alterações', cancelSessionAdjustments: 'Cancelar',
+    finishSession: 'Finalizar sessão', finishSessionTitle: 'Finalizar esta sessão?',
+    finishSessionProgress: (completed, planned, duration) => `Você concluiu ${completed} de ${planned} ${planned === 1 ? 'intervalo' : 'intervalos'} · ${duration} de treino.`,
+    continueSession: 'Continuar', savePartialSession: 'Salvar o que foi feito', partialSessionSaved: 'Sessão parcial salva.', discardSession: 'Descartar',
     workoutProgress: (round, rounds, cycle, cycles) => `Progresso do treino. Rodada ${round} de ${rounds}, ciclo ${cycle} de ${cycles}.`,
     round: 'Rodada', cycle: 'Ciclo', restartWorkout: 'Reiniciar treino', pauseWorkout: 'Pausar treino',
     startWorkout: 'Iniciar treino', again: 'De novo', pause: 'Pausar', start: 'Iniciar', resume: 'Continuar',

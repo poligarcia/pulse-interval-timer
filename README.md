@@ -14,9 +14,11 @@ Timers, their order and settings are stored locally in the browser. They are not
 
 ## Progress
 
-Pulse records a workout when its final phase completes. The Progress screen summarizes total training time, active Work time, completed workouts and active days across day, week and month views. It also shows active-day and configurable weekly active-day goal streaks, four durable training milestones and a reverse-chronological workout journal.
+Before starting, a timer can be adjusted for the current session without changing the saved timer. Once the workout starts, its rounds and cycles are locked for that run.
 
-Workout history is stored locally on the current browser or installed PWA. Editing or deleting a timer does not rewrite past sessions because each history entry keeps a snapshot of the timer that was completed. Reset or abandoned workouts are not added to Progress.
+Pulse records a completed workout when its final phase finishes. A workout can also be paused, ended early and saved with its actual elapsed training and active Work time. The Progress screen summarizes training time, active Work time, workout sessions and active days across day, week and month views. It also shows active-day and configurable weekly active-day goal streaks, four durable training milestones and a reverse-chronological workout journal.
+
+Workout history is stored locally on the current browser or installed PWA. Editing or deleting a timer does not rewrite past sessions because each history entry keeps a snapshot of its timer plan. Partial sessions are labeled separately; they contribute their actual time, while completed-workout milestones only count sessions that reached the final phase. Reset or explicitly discarded workouts are not added to Progress.
 
 ## Workout reminders
 
@@ -40,5 +42,10 @@ Pulse bundles 120 curated motivational messages and 40 workout-specific cooldown
 npm install
 npm run dev
 ```
+
+Pulse Labs planning and verification are documented in:
+
+- [`docs/IMPLEMENTATION_GUIDE.md`](docs/IMPLEMENTATION_GUIDE.md)
+- [`docs/TEST_SPEC.md`](docs/TEST_SPEC.md)
 
 Production is published only through GitHub Pages using `npm run build:github` and the included deployment workflow. Do not publish this project through ChatGPT Sites.

@@ -11,7 +11,7 @@
     "build:github": "GITHUB_ACTIONS=true next build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node --experimental-strip-types --test coach/*.test.ts progress/*.test.ts reminders/*.test.ts labs/*.test.ts labs/model/*.test.ts i18n/*.test.ts"
+    "test": "node --experimental-strip-types --test coach/*.test.ts progress/*.test.ts reminders/*.test.ts labs/*.test.ts labs/model/*.test.ts i18n/*.test.ts workout/*.test.ts"
   },
   "dependencies": {
     "next": "16.2.6",

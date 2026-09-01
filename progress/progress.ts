@@ -6,11 +6,22 @@ import type {
   ProgressSummary,
   WorkoutHistoryMonth,
   WorkoutSession,
+  WorkoutSessionMetrics,
   WorkoutTimerSnapshot,
 } from './types.ts';
 
 const DAY_MS = 86_400_000;
 export const DEFAULT_WEEKLY_ACTIVE_DAY_GOAL = 3;
+
+const TIMER_LIMITS = {
+  prepare: { min: 0, max: 600 },
+  work: { min: 1, max: 3600 },
+  rest: { min: 0, max: 3600 },
+  rounds: { min: 1, max: 99 },
+  cycles: { min: 1, max: 20 },
+  cycleRest: { min: 0, max: 3600 },
+  cooldown: { min: 0, max: 3600 },
+} as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -20,22 +31,47 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isNumberInRange(value: unknown, min: number, max: number): value is number {
+  return isFiniteNumber(value) && value >= min && value <= max;
+}
+
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return isNumberInRange(value, min, max) && Number.isInteger(value);
+}
+
 function isTimerSnapshot(value: unknown): value is WorkoutTimerSnapshot {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string'
     && typeof value.name === 'string'
-    && isFiniteNumber(value.prepare)
-    && isFiniteNumber(value.work)
-    && isFiniteNumber(value.rest)
-    && isFiniteNumber(value.rounds)
-    && isFiniteNumber(value.cycles)
-    && isFiniteNumber(value.cycleRest)
-    && isFiniteNumber(value.cooldown);
+    && (value.nameIsCustom === undefined || typeof value.nameIsCustom === 'boolean')
+    && isNumberInRange(value.prepare, TIMER_LIMITS.prepare.min, TIMER_LIMITS.prepare.max)
+    && isNumberInRange(value.work, TIMER_LIMITS.work.min, TIMER_LIMITS.work.max)
+    && isNumberInRange(value.rest, TIMER_LIMITS.rest.min, TIMER_LIMITS.rest.max)
+    && isIntegerInRange(value.rounds, TIMER_LIMITS.rounds.min, TIMER_LIMITS.rounds.max)
+    && isIntegerInRange(value.cycles, TIMER_LIMITS.cycles.min, TIMER_LIMITS.cycles.max)
+    && isNumberInRange(value.cycleRest, TIMER_LIMITS.cycleRest.min, TIMER_LIMITS.cycleRest.max)
+    && isNumberInRange(value.cooldown, TIMER_LIMITS.cooldown.min, TIMER_LIMITS.cooldown.max);
 }
 
-function isWorkoutSession(value: unknown): value is WorkoutSession {
+type StoredWorkoutSessionBase = {
+  schemaVersion: 1 | 2;
+  id: string;
+  timerId: string;
+  timerName: string;
+  startedAt: string;
+  completedAt: string;
+  localDate: string;
+  timezoneOffsetMinutes: number;
+  totalSeconds: number;
+  activeWorkSeconds: number;
+  rounds: number;
+  cycles: number;
+  timerSnapshot: WorkoutTimerSnapshot;
+};
+
+function isStoredWorkoutSessionBase(value: unknown): value is StoredWorkoutSessionBase {
   if (!isRecord(value)) return false;
-  return value.schemaVersion === 1
+  return (value.schemaVersion === 1 || value.schemaVersion === 2)
     && typeof value.id === 'string'
     && typeof value.timerId === 'string'
     && typeof value.timerName === 'string'
@@ -47,11 +83,186 @@ function isWorkoutSession(value: unknown): value is WorkoutSession {
     && value.totalSeconds >= 0
     && isFiniteNumber(value.activeWorkSeconds)
     && value.activeWorkSeconds >= 0
-    && isFiniteNumber(value.rounds)
-    && isFiniteNumber(value.cycles)
+    && value.activeWorkSeconds <= value.totalSeconds
+    && isIntegerInRange(value.rounds, TIMER_LIMITS.rounds.min, TIMER_LIMITS.rounds.max)
+    && isIntegerInRange(value.cycles, TIMER_LIMITS.cycles.min, TIMER_LIMITS.cycles.max)
     && isTimerSnapshot(value.timerSnapshot)
+    && value.rounds === value.timerSnapshot.rounds
+    && value.cycles === value.timerSnapshot.cycles
     && Number.isFinite(Date.parse(value.startedAt))
     && Number.isFinite(Date.parse(value.completedAt));
+}
+
+type WorkoutPlanPhase = {
+  kind: 'work' | 'other';
+  duration: number;
+};
+
+function boundedNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function boundedInteger(value: number, min: number, max: number) {
+  return Math.trunc(boundedNumber(value, min, max));
+}
+
+function boundedTimerSnapshot(timer: WorkoutTimerSnapshot): WorkoutTimerSnapshot {
+  return {
+    ...timer,
+    prepare: boundedNumber(timer.prepare, TIMER_LIMITS.prepare.min, TIMER_LIMITS.prepare.max),
+    work: boundedNumber(timer.work, TIMER_LIMITS.work.min, TIMER_LIMITS.work.max),
+    rest: boundedNumber(timer.rest, TIMER_LIMITS.rest.min, TIMER_LIMITS.rest.max),
+    rounds: boundedInteger(timer.rounds, TIMER_LIMITS.rounds.min, TIMER_LIMITS.rounds.max),
+    cycles: boundedInteger(timer.cycles, TIMER_LIMITS.cycles.min, TIMER_LIMITS.cycles.max),
+    cycleRest: boundedNumber(timer.cycleRest, TIMER_LIMITS.cycleRest.min, TIMER_LIMITS.cycleRest.max),
+    cooldown: boundedNumber(timer.cooldown, TIMER_LIMITS.cooldown.min, TIMER_LIMITS.cooldown.max),
+  };
+}
+
+function workoutPlan(timer: WorkoutTimerSnapshot) {
+  const phases: WorkoutPlanPhase[] = [];
+  const boundedTimer = boundedTimerSnapshot(timer);
+  const rounds = boundedTimer.rounds;
+  const cycles = boundedTimer.cycles;
+
+  if (boundedTimer.prepare > 0) {
+    phases.push({ kind: 'other', duration: boundedTimer.prepare });
+  }
+  for (let cycle = 1; cycle <= cycles; cycle += 1) {
+    for (let round = 1; round <= rounds; round += 1) {
+      phases.push({ kind: 'work', duration: boundedTimer.work });
+      if (round < rounds && boundedTimer.rest > 0) {
+        phases.push({ kind: 'other', duration: boundedTimer.rest });
+      }
+    }
+    if (cycle < cycles && boundedTimer.cycleRest > 0) {
+      phases.push({ kind: 'other', duration: boundedTimer.cycleRest });
+    }
+  }
+  if (boundedTimer.cooldown > 0) {
+    phases.push({ kind: 'other', duration: boundedTimer.cooldown });
+  }
+
+  return {
+    phases,
+    plannedWorkIntervals: rounds * cycles,
+    plannedTotalSeconds: phases.reduce((sum, phase) => sum + phase.duration, 0),
+  };
+}
+
+/**
+ * Converts scheduled time consumed in the runner into durable progress metrics.
+ * Elapsed time is clamped to the timer plan, so paused wall-clock time is never counted.
+ */
+export function calculateWorkoutSessionMetrics(
+  timer: WorkoutTimerSnapshot,
+  elapsedSeconds: number,
+): WorkoutSessionMetrics {
+  const plan = workoutPlan(timer);
+  const totalSeconds = Math.min(
+    plan.plannedTotalSeconds,
+    Math.max(0, isFiniteNumber(elapsedSeconds) ? elapsedSeconds : 0),
+  );
+  let unallocatedSeconds = totalSeconds;
+  let activeWorkSeconds = 0;
+  let completedWorkIntervals = 0;
+
+  for (const phase of plan.phases) {
+    if (unallocatedSeconds <= 0) break;
+    const consumedSeconds = Math.min(phase.duration, unallocatedSeconds);
+    if (phase.kind === 'work') {
+      activeWorkSeconds += consumedSeconds;
+      if (phase.duration > 0 && consumedSeconds >= phase.duration) completedWorkIntervals += 1;
+    }
+    unallocatedSeconds -= consumedSeconds;
+  }
+
+  return {
+    totalSeconds,
+    activeWorkSeconds,
+    completedWorkIntervals,
+    plannedWorkIntervals: plan.plannedWorkIntervals,
+    plannedTotalSeconds: plan.plannedTotalSeconds,
+  };
+}
+
+function nonNegativeInteger(value: unknown) {
+  return isFiniteNumber(value) && value >= 0 && Number.isInteger(value) ? value : null;
+}
+
+function nonNegativeNumber(value: unknown) {
+  return isFiniteNumber(value) && value >= 0 ? value : null;
+}
+
+function storedSessionFields(value: StoredWorkoutSessionBase) {
+  return {
+    id: value.id,
+    timerId: value.timerId,
+    timerName: value.timerName,
+    startedAt: value.startedAt,
+    completedAt: value.completedAt,
+    localDate: value.localDate,
+    timezoneOffsetMinutes: value.timezoneOffsetMinutes,
+    rounds: value.rounds,
+    cycles: value.cycles,
+    timerSnapshot: { ...value.timerSnapshot },
+  };
+}
+
+function migrateLegacyWorkoutSession(value: StoredWorkoutSessionBase): WorkoutSession {
+  const plan = calculateWorkoutSessionMetrics(value.timerSnapshot, value.totalSeconds);
+  return {
+    schemaVersion: 2,
+    ...storedSessionFields(value),
+    status: 'completed',
+    totalSeconds: value.totalSeconds,
+    activeWorkSeconds: value.activeWorkSeconds,
+    completedWorkIntervals: plan.plannedWorkIntervals,
+    plannedWorkIntervals: plan.plannedWorkIntervals,
+    plannedTotalSeconds: Math.max(plan.plannedTotalSeconds, value.totalSeconds),
+  };
+}
+
+function normalizeV2WorkoutSession(
+  rawValue: Record<string, unknown>,
+  value: StoredWorkoutSessionBase,
+): WorkoutSession | null {
+  const status = rawValue.status === 'completed' || rawValue.status === 'stopped'
+    ? rawValue.status
+    : null;
+  const completedWorkIntervals = nonNegativeInteger(rawValue.completedWorkIntervals);
+  const plannedWorkIntervals = nonNegativeInteger(rawValue.plannedWorkIntervals);
+  const plannedTotalSeconds = nonNegativeNumber(rawValue.plannedTotalSeconds);
+  if (!status
+    || completedWorkIntervals === null
+    || plannedWorkIntervals === null
+    || plannedTotalSeconds === null) return null;
+
+  const derivedMetrics = calculateWorkoutSessionMetrics(value.timerSnapshot, value.totalSeconds);
+  if (value.totalSeconds !== derivedMetrics.totalSeconds
+    || value.activeWorkSeconds !== derivedMetrics.activeWorkSeconds
+    || completedWorkIntervals !== derivedMetrics.completedWorkIntervals
+    || plannedWorkIntervals !== derivedMetrics.plannedWorkIntervals
+    || plannedTotalSeconds !== derivedMetrics.plannedTotalSeconds
+    || (status === 'completed' && value.totalSeconds !== plannedTotalSeconds)) return null;
+
+  return {
+    schemaVersion: 2,
+    ...storedSessionFields(value),
+    status,
+    totalSeconds: value.totalSeconds,
+    activeWorkSeconds: value.activeWorkSeconds,
+    completedWorkIntervals,
+    plannedWorkIntervals,
+    plannedTotalSeconds,
+  };
+}
+
+function normalizeWorkoutSession(value: unknown): WorkoutSession | null {
+  if (!isRecord(value) || !isStoredWorkoutSessionBase(value)) return null;
+  if (value.schemaVersion === 1) return migrateLegacyWorkoutSession(value);
+  return normalizeV2WorkoutSession(value, value);
 }
 
 function pad(value: number) {
@@ -96,8 +307,12 @@ function sumSessions(sessions: WorkoutSession[]): ProgressSummary {
     totalSeconds: sessions.reduce((sum, session) => sum + session.totalSeconds, 0),
     activeWorkSeconds: sessions.reduce((sum, session) => sum + session.activeWorkSeconds, 0),
     workouts: sessions.length,
-    activeDays: new Set(sessions.map((session) => session.localDate)).size,
+    activeDays: new Set(sessions.filter(countsAsActiveDay).map((session) => session.localDate)).size,
   };
+}
+
+function countsAsActiveDay(session: WorkoutSession) {
+  return session.status === 'completed' || session.completedWorkIntervals > 0;
 }
 
 function sessionId(completedAt: Date) {
@@ -112,26 +327,52 @@ export function createWorkoutSession(
   startedAt: Date,
   completedAt = new Date(),
 ): WorkoutSession {
-  const totalSeconds = timer.prepare
-    + timer.work * timer.rounds * timer.cycles
-    + timer.rest * Math.max(0, timer.rounds - 1) * timer.cycles
-    + timer.cycleRest * Math.max(0, timer.cycles - 1)
-    + timer.cooldown;
+  const timerSnapshot = boundedTimerSnapshot(timer);
+  const plan = workoutPlan(timerSnapshot);
+  const metrics = calculateWorkoutSessionMetrics(timerSnapshot, plan.plannedTotalSeconds);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: sessionId(completedAt),
-    timerId: timer.id,
-    timerName: timer.name,
+    timerId: timerSnapshot.id,
+    timerName: timerSnapshot.name,
+    status: 'completed',
     startedAt: startedAt.toISOString(),
     completedAt: completedAt.toISOString(),
     localDate: localDateKey(completedAt),
     timezoneOffsetMinutes: -completedAt.getTimezoneOffset(),
-    totalSeconds,
-    activeWorkSeconds: timer.work * timer.rounds * timer.cycles,
-    rounds: timer.rounds,
-    cycles: timer.cycles,
-    timerSnapshot: { ...timer },
+    ...metrics,
+    rounds: timerSnapshot.rounds,
+    cycles: timerSnapshot.cycles,
+    timerSnapshot,
+  };
+}
+
+/**
+ * Creates a stopped session from the scheduled seconds consumed before stopping.
+ * The immutable timer snapshot remains the full plan; the session metrics describe actual progress.
+ */
+export function createStoppedWorkoutSession(
+  timer: WorkoutTimerSnapshot,
+  startedAt: Date,
+  elapsedSeconds: number,
+  stoppedAt = new Date(),
+): WorkoutSession {
+  const timerSnapshot = boundedTimerSnapshot(timer);
+  return {
+    schemaVersion: 2,
+    id: sessionId(stoppedAt),
+    timerId: timerSnapshot.id,
+    timerName: timerSnapshot.name,
+    status: 'stopped',
+    startedAt: startedAt.toISOString(),
+    completedAt: stoppedAt.toISOString(),
+    localDate: localDateKey(stoppedAt),
+    timezoneOffsetMinutes: -stoppedAt.getTimezoneOffset(),
+    ...calculateWorkoutSessionMetrics(timerSnapshot, elapsedSeconds),
+    rounds: timerSnapshot.rounds,
+    cycles: timerSnapshot.cycles,
+    timerSnapshot,
   };
 }
 
@@ -139,7 +380,8 @@ export function parseWorkoutSessions(value: unknown): WorkoutSession[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   return value
-    .filter(isWorkoutSession)
+    .map(normalizeWorkoutSession)
+    .filter((session): session is WorkoutSession => session !== null)
     .filter((session) => {
       if (seen.has(session.id)) return false;
       seen.add(session.id);
@@ -218,7 +460,7 @@ export function progressBuckets(
 
 function activeDaysByWeek(sessions: WorkoutSession[]) {
   const activeDays = new Map<string, Set<string>>();
-  for (const session of sessions) {
+  for (const session of sessions.filter(countsAsActiveDay)) {
     const week = startOfWeekKey(session.localDate);
     const days = activeDays.get(week) ?? new Set<string>();
     days.add(session.localDate);
@@ -232,7 +474,9 @@ export function calculateProgressStreaks(
   now = new Date(),
   weeklyGoal = DEFAULT_WEEKLY_ACTIVE_DAY_GOAL,
 ): ProgressStreaks {
-  const activeDates = [...new Set(sessions.map((session) => session.localDate))].sort();
+  const activeDates = [...new Set(
+    sessions.filter(countsAsActiveDay).map((session) => session.localDate),
+  )].sort();
   const activeDateSet = new Set(activeDates);
   const today = localDateKey(now);
   const yesterday = addDays(today, -1);
@@ -310,19 +554,20 @@ export function calculateProgressMilestones(
   const streaks = calculateProgressStreaks(sessions, now, weeklyGoal);
   const totalSeconds = sessions.reduce((sum, session) => sum + session.totalSeconds, 0);
   const totalHours = totalSeconds / 3600;
+  const completedWorkoutCount = sessions.filter((session) => session.status === 'completed').length;
 
   return [
     {
       id: 'first-workout',
-      progress: Math.min(sessions.length, 1),
+      progress: Math.min(completedWorkoutCount, 1),
       target: 1,
-      unlocked: sessions.length >= 1,
+      unlocked: completedWorkoutCount >= 1,
     },
     {
       id: 'ten-workouts',
-      progress: Math.min(sessions.length, 10),
+      progress: Math.min(completedWorkoutCount, 10),
       target: 10,
-      unlocked: sessions.length >= 10,
+      unlocked: completedWorkoutCount >= 10,
     },
     {
       id: 'two-goal-weeks',
