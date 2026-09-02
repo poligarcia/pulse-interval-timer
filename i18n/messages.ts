@@ -49,6 +49,7 @@ export type AppMessages = {
     useAutomaticName: string;
     intervals: string;
     seconds: string;
+    time: string;
     structure: string;
     repeats: string;
     prepare: string;
@@ -65,6 +66,7 @@ export type AppMessages = {
     cyclesHelper: (rounds: number) => string;
     cycleRest: string;
     cycleRestHelper: string;
+    minutesUnit: string;
     secondsUnit: string;
     cycleExplainerTitle: string;
     cycleExplainerBody: string;
@@ -310,14 +312,14 @@ const en: AppMessages = {
   editor: {
     eyebrow: 'TIMER SETUP', editTitle: 'Edit timer', newTitle: 'New timer', nameLabel: 'Timer name',
     customName: 'Custom name', automaticNameHelper: 'Updates automatically with the intervals',
-    useAutomaticName: 'Use automatic name', intervals: 'Intervals', seconds: 'SECONDS',
+    useAutomaticName: 'Use automatic name', intervals: 'Intervals', seconds: 'SECONDS', time: 'TIME',
     structure: 'Structure', repeats: 'REPEATS', prepare: 'Prepare', prepareHelper: 'Countdown before you start',
     work: 'Work', workHelper: 'Move for this long', rest: 'Rest', restHelper: 'Between rounds',
     cooldown: 'Cooldown', cooldownHelper: 'Once after the workout', rounds: 'Rounds',
     roundsHelper: 'One round is one Work interval', cycles: 'Cycles',
     cyclesHelper: (rounds) => `One cycle repeats all ${rounds} rounds`,
     cycleRest: 'Rest between cycles', cycleRestHelper: 'Only inserted when cycles are 2 or more',
-    secondsUnit: 'sec', cycleExplainerTitle: 'How cycles work',
+    minutesUnit: 'min', secondsUnit: 'sec', cycleExplainerTitle: 'How cycles work',
     cycleExplainerBody: 'Rounds are the Work intervals inside a block. A cycle repeats that whole block. The extra cycle rest is added only between blocks — never after the last one.',
     estimatedDuration: 'Estimated duration', deleteTimer: 'Delete timer',
   },
@@ -488,14 +490,14 @@ const esAR: AppMessages = {
   editor: {
     eyebrow: 'CONFIGURAR TIMER', editTitle: 'Editar timer', newTitle: 'Nuevo timer', nameLabel: 'Nombre del timer',
     customName: 'Nombre personalizado', automaticNameHelper: 'Se actualiza automáticamente con los intervalos',
-    useAutomaticName: 'Usar nombre automático', intervals: 'Intervalos', seconds: 'SEGUNDOS',
+    useAutomaticName: 'Usar nombre automático', intervals: 'Intervalos', seconds: 'SEGUNDOS', time: 'TIEMPO',
     structure: 'Estructura', repeats: 'REPETICIONES', prepare: 'Preparación', prepareHelper: 'Cuenta regresiva antes de empezar',
     work: 'Trabajo', workHelper: 'Movete durante este tiempo', rest: 'Descanso', restHelper: 'Entre rondas',
     cooldown: 'Vuelta a la calma', cooldownHelper: 'Una vez al terminar', rounds: 'Rondas',
     roundsHelper: 'Cada ronda contiene un intervalo de Trabajo', cycles: 'Ciclos',
     cyclesHelper: (rounds) => `Cada ciclo repite las ${rounds} rondas`,
     cycleRest: 'Descanso entre ciclos', cycleRestHelper: 'Se agrega solo cuando hay 2 ciclos o más',
-    secondsUnit: 's', cycleExplainerTitle: 'Cómo funcionan los ciclos',
+    minutesUnit: 'min', secondsUnit: 's', cycleExplainerTitle: 'Cómo funcionan los ciclos',
     cycleExplainerBody: 'Las rondas son los intervalos de Trabajo dentro de un bloque. Un ciclo repite todo el bloque. El descanso extra se agrega únicamente entre bloques, nunca después del último.',
     estimatedDuration: 'Duración estimada', deleteTimer: 'Eliminar timer',
   },
@@ -666,14 +668,14 @@ const ptBR: AppMessages = {
   editor: {
     eyebrow: 'CONFIGURAR TIMER', editTitle: 'Editar timer', newTitle: 'Novo timer', nameLabel: 'Nome do timer',
     customName: 'Nome personalizado', automaticNameHelper: 'Atualiza automaticamente com os intervalos',
-    useAutomaticName: 'Usar nome automático', intervals: 'Intervalos', seconds: 'SEGUNDOS',
+    useAutomaticName: 'Usar nome automático', intervals: 'Intervalos', seconds: 'SEGUNDOS', time: 'TEMPO',
     structure: 'Estrutura', repeats: 'REPETIÇÕES', prepare: 'Preparação', prepareHelper: 'Contagem regressiva antes de começar',
     work: 'Trabalho', workHelper: 'Treine durante este tempo', rest: 'Descanso', restHelper: 'Entre rodadas',
     cooldown: 'Volta à calma', cooldownHelper: 'Uma vez após o treino', rounds: 'Rodadas',
     roundsHelper: 'Cada rodada contém um intervalo de Trabalho', cycles: 'Ciclos',
     cyclesHelper: (rounds) => `Cada ciclo repete as ${rounds} rodadas`,
     cycleRest: 'Descanso entre ciclos', cycleRestHelper: 'Adicionado somente quando há 2 ciclos ou mais',
-    secondsUnit: 's', cycleExplainerTitle: 'Como os ciclos funcionam',
+    minutesUnit: 'min', secondsUnit: 's', cycleExplainerTitle: 'Como os ciclos funcionam',
     cycleExplainerBody: 'As rodadas são os intervalos de Trabalho dentro de um bloco. Um ciclo repete todo o bloco. O descanso extra é adicionado apenas entre os blocos, nunca depois do último.',
     estimatedDuration: 'Duração estimada', deleteTimer: 'Excluir timer',
   },
