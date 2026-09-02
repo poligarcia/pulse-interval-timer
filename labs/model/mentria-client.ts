@@ -1,3 +1,4 @@
+import { BRAND_NAME } from '../../branding.ts';
 import { deleteOwnedModelStorage, isTextModelCached } from './cache.ts';
 import {
   MENTRIA_MODEL_REVISION,
@@ -62,7 +63,7 @@ export async function detectWebGpuSupport(gpu: GpuLike): Promise<ModelSupport> {
       ? { supported: true, cached: false }
       : { supported: false, reason: 'This browser could not acquire a usable WebGPU adapter.' };
   } catch {
-    return { supported: false, reason: 'Pulse could not verify WebGPU support on this device. You can retry later.' };
+    return { supported: false, reason: `${BRAND_NAME} could not verify WebGPU support on this device. You can retry later.` };
   }
 }
 

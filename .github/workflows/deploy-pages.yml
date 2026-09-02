@@ -1,4 +1,4 @@
-name: Deploy Pulse to GitHub Pages
+name: Deploy Laptiva to GitHub Pages
 
 on:
   push:

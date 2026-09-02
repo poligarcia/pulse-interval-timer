@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BRAND_MARK, BRAND_NAME } from '@/branding';
 import { getMessages, useLocale } from '@/i18n';
 
 const SPLASH_EXIT_DELAY_MS = 1350;
@@ -38,16 +39,16 @@ export function SplashScreen() {
     <div
       className={`splash-screen${isExiting ? ' is-exiting' : ''}`}
       role="status"
-      aria-label={copy.shell.openingPulse}
+      aria-label={copy.shell.openingApp}
     >
       <div className="splash-glow" aria-hidden="true" />
       <div className="splash-content">
         <div className="splash-brand" aria-hidden="true">
           <span className="splash-mark">
-            <span>P</span>
+            <span>{BRAND_MARK}</span>
             <i />
           </span>
-          <strong>Pulse</strong>
+          <strong>{BRAND_NAME}</strong>
         </div>
         <div className="splash-pulse" aria-hidden="true">
           <span />

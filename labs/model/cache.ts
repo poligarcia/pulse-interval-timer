@@ -1,3 +1,5 @@
+import { BRAND_NAME } from '../../branding.ts';
+
 export const OWNED_MODEL_CACHE_NAMES = ['mentria-models'] as const;
 export const OWNED_MODEL_DATABASE_NAMES: readonly string[] = [];
 
@@ -27,7 +29,7 @@ export async function deleteOwnedModelStorage(environment: ModelStorageEnvironme
       }
     }
   }
-  if (failures.length > 0) throw new Error('Some Pulse Labs model storage could not be deleted.');
+  if (failures.length > 0) throw new Error(`Some ${BRAND_NAME} Labs model storage could not be deleted.`);
 }
 
 export async function isTextModelCached(cacheStorage?: CacheStorage): Promise<boolean> {

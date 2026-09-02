@@ -44,6 +44,7 @@ import {
 import type { ProgressMilestone, WorkoutSession } from '@/progress';
 import { ProgressScreen } from '@/progress/ProgressScreen';
 import { AppIcon } from '@/components/AppIcon';
+import { BRAND_MARK, BRAND_NAME } from '@/branding';
 import {
   DEFAULT_REMINDER_DAYS,
   DEFAULT_REMINDER_TIME,
@@ -73,7 +74,7 @@ import type { AudioEngine } from '@/workout/audio-engine';
 import { WorkoutTimeline } from '@/workout/timeline';
 import type { WorkoutTimelineEvent, WorkoutTimelineSnapshot } from '@/workout/timeline';
 
-const PulseLabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
+const LabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
 
 type TimerConfig = {
   id: string;
@@ -2012,7 +2013,7 @@ export default function Home() {
     setScreen('settings');
   };
 
-  const hidePulseLabs = () => {
+  const hideLabsFromSettings = () => {
     hideLabs(window.localStorage);
     setLabsUnlocked(false);
     const sequenceState = createLabsUnlockSequence(false);
@@ -2053,7 +2054,7 @@ export default function Home() {
       );
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'pulse-workout-reminders.ics';
+      link.download = 'laptiva-workout-reminders.ics';
       link.rel = 'noopener';
       link.target = '_self';
       link.type = 'text/calendar';
@@ -2134,7 +2135,7 @@ export default function Home() {
   if (screen === 'labs') {
     return (
       <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">{copy.status.openingLabs}</p></main>}>
-        <PulseLabsScreen onBack={leaveLabs} onHideLabs={hidePulseLabs} />
+        <LabsScreen onBack={leaveLabs} onHideLabs={hideLabsFromSettings} />
       </Suspense>
     );
   }
@@ -2259,7 +2260,7 @@ export default function Home() {
               </label>
               <button className="calendar-reminder-button" onClick={addCalendarReminders}>
                 <AppIcon name="calendar" size={21} strokeWidth={1.9} />
-                <span><strong>{copy.settings.addRemindersToCalendar}</strong><small>{copy.settings.worksAfterPulseCloses}</small></span>
+                <span><strong>{copy.settings.addRemindersToCalendar}</strong><small>{copy.settings.worksAfterAppCloses}</small></span>
                 <AppIcon name="arrow-right" size={18} />
               </button>
               {calendarStatus && <p className="calendar-status" role="status">{calendarStatus}</p>}
@@ -2275,7 +2276,7 @@ export default function Home() {
             </div>
             <button className="setting-row setting-action" onClick={() => { void playCue('work'); }}>
               <div><strong>{copy.audioSettings.soundScheme}</strong><small>{copy.audioSettings.soundSchemeHelper}</small></div>
-              <span className="setting-value">{copy.audioSettings.pulseBeep} <i className="mini-play"><PlayGlyph /></i></span>
+              <span className="setting-value">{copy.audioSettings.appBeep} <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <label className="volume-row">
               <span className="volume-icon">−</span>
@@ -2416,7 +2417,7 @@ export default function Home() {
             <div className="settings-group">
               <p className="settings-kicker">{copy.experimentalSettings.kicker}</p>
               <button ref={labsOpeningControlRef} className="setting-row setting-action" onClick={() => setScreen('labs')}>
-                <div><strong>Pulse Labs</strong><small>{copy.experimentalSettings.labsHelper}</small></div>
+                <div><strong>{BRAND_NAME} Labs</strong><small>{copy.experimentalSettings.labsHelper}</small></div>
                 <span className="setting-value">{copy.experimentalSettings.open} <AppIcon name="arrow-right" size={17} /></span>
               </button>
               <p className="setting-note">{copy.experimentalSettings.labsNote}</p>
@@ -2424,9 +2425,9 @@ export default function Home() {
           )}
 
           <footer className="version-card">
-            <span className="brand-mark small">P</span>
+            <span className="brand-mark small">{BRAND_MARK}</span>
             <div>
-              <strong>Pulse</strong>
+              <strong>{BRAND_NAME}</strong>
               <small>
                 <button
                   type="button"
@@ -2766,7 +2767,7 @@ export default function Home() {
   return (
       <main className="app-shell home-screen">
       <header className="topbar">
-        <div className="brand-lockup"><span className="brand-mark">P</span><div><p className="eyebrow">{copy.home.brandEyebrow}</p><h1>Pulse</h1></div></div>
+        <div className="brand-lockup"><span className="brand-mark">{BRAND_MARK}</span><div><p className="eyebrow">{copy.home.brandEyebrow}</p><h1>{BRAND_NAME}</h1></div></div>
         <button className="icon-button" aria-label={copy.common.openSettings} onClick={() => openSettings('home')}><AppIcon name="settings" /></button>
       </header>
 

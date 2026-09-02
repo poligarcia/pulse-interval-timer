@@ -1,5 +1,5 @@
 const APP_CACHE_PREFIX = 'pulse-app-';
-const CACHE_NAME = `${APP_CACHE_PREFIX}v10`;
+const CACHE_NAME = `${APP_CACHE_PREFIX}v11`;
 const APP_SHELL = [
   './',
   './manifest.webmanifest',

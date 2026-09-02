@@ -38,7 +38,7 @@ test('display message libraries have the reviewed target sizes and unique conten
   assert.equal(new Set(normalizedTexts).size, messages.length);
   assert.ok(messages.every(({ text }) => text === text.trim() && text.length <= 180));
   assert.ok(MOTIVATIONAL_MESSAGES.every(({ author }) => author === 'Mentria'));
-  assert.ok(ASPIRATIONAL_MESSAGES.every(({ author }) => author === 'Pulse Coach'));
+  assert.ok(ASPIRATIONAL_MESSAGES.every(({ author }) => author === 'Laptiva Coach'));
 });
 
 test('motivational messages avoid the twenty most recently shown messages', () => {
@@ -81,7 +81,7 @@ test('stored message memory ignores unknown and malformed entries', () => {
   });
 });
 
-test('Spanish and Portuguese use original unattributed Pulse message libraries', () => {
+test('Spanish and Portuguese use original unattributed Laptiva message libraries', () => {
   for (const locale of ['es-AR', 'pt-BR'] as const) {
     const messages = displayMessagesForLocale(locale);
     assert.equal(messages.motivation.length, 24);

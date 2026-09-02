@@ -11,9 +11,9 @@ export const REMINDER_DAY_OPTIONS: ReminderDayOption[] = [
 ];
 
 const DEFAULT_CALENDAR_COPY: WorkoutReminderCalendarCopy = {
-  summary: 'Pulse workout',
-  description: 'Open Pulse and complete a focused interval workout.',
-  alarmDescription: 'Time for your Pulse workout.',
+  summary: 'Laptiva workout',
+  description: 'Open Laptiva and complete a focused interval workout.',
+  alarmDescription: 'Time for your Laptiva workout.',
 };
 
 export const DEFAULT_REMINDER_DAYS: ReminderDay[] = [1, 3, 5];
@@ -88,7 +88,7 @@ export function createWorkoutReminderCalendar(
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Pulse Interval Timer//Workout Reminders 1.4//EN',
+    'PRODID:-//Laptiva Interval Timer//Workout Reminders 1.4//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

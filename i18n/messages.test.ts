@@ -39,7 +39,7 @@ test('progress milestones and reminder days are locale-specific', () => {
   assert.equal(getMessages('es-AR').progress.milestones['first-workout'].title, 'Primer paso');
   assert.equal(getMessages('pt-BR').progress.milestones['five-hours'].title, 'Clube das cinco horas');
   assert.deepEqual(getMessages('es-AR').settings.reminderDays[3], { label: 'Miércoles', short: 'X' });
-  assert.equal(getMessages('pt-BR').settings.calendarEvent.summary, 'Treino Pulse');
+  assert.equal(getMessages('pt-BR').settings.calendarEvent.summary, 'Treino Laptiva');
 });
 
 test('session adjustment copy keeps changes scoped to the current session', () => {

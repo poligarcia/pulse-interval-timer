@@ -69,21 +69,26 @@ body {
   position: relative;
   display: grid;
   justify-items: center;
-  width: min(100%, 430px);
+  width: min(100%, 470px);
 }
 
 .splash-brand {
   display: flex;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: clamp(12px, 4vw, 18px);
+  width: 100%;
+  padding-inline: 10px;
   animation: splash-rise .58s cubic-bezier(.2, .8, .2, 1) both;
 }
 
 .splash-brand strong {
-  font-size: clamp(54px, 17vw, 86px);
+  min-width: 0;
+  font-size: clamp(43px, 13vw, 68px);
   font-weight: 1000;
-  line-height: .8;
-  letter-spacing: -.085em;
+  line-height: .84;
+  letter-spacing: -.075em;
+  white-space: nowrap;
 }
 
 .splash-mark {
@@ -202,10 +207,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: calc(20px + env(safe-area-inset-top)) 20px 18px;
 }
 
-.brand-lockup { display: flex; align-items: center; gap: 12px; }
+.brand-lockup { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-lockup > div { min-width: 0; }
 .brand-mark {
   display: grid;
   place-items: center;
@@ -233,11 +240,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .eyebrow.dark { color: #30352d; }
 .topbar h1, .section-heading h2 {
   margin: 0;
-  font-size: 34px;
+  font-size: clamp(28px, 9vw, 34px);
   font-weight: 950;
   letter-spacing: -.065em;
   line-height: .95;
 }
+.topbar h1 { white-space: nowrap; }
 
 .icon-button {
   display: grid;
@@ -490,7 +498,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .header-title { display: grid; justify-items: center; line-height: 1; }
 .header-title .eyebrow { margin-bottom: 6px; font-size: 8px; }
-.header-title strong, .header-title h1 { margin: 0; font-size: 20px; letter-spacing: -.035em; white-space: nowrap; }
+.header-title strong, .header-title h1 { margin: 0; font-size: clamp(17px, 5.5vw, 20px); letter-spacing: -.035em; white-space: nowrap; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .text-button { padding: 10px 0; border: 0; background: transparent; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
 .text-button:last-child { justify-self: end; }
@@ -679,7 +687,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .voice-select-row small { color: var(--muted); font-size: 11px; }
 .voice-select-row select { width: 100%; padding: 12px 38px 12px 12px; border: 1px solid #41484b; border-radius: 12px; color: white; background: #202527; font-size: 13px; }
 .version-card { display: flex; align-items: center; gap: 13px; padding: 7px 3px; }
-.version-card > div { display: grid; gap: 3px; }
+.version-card > div { display: grid; min-width: 0; gap: 3px; }
 .version-card strong { font-size: 16px; }
 .version-card small { color: var(--muted); font-size: 11px; }
 .version-card a { color: inherit; text-underline-offset: 2px; }
@@ -867,7 +875,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .library-actions button:disabled { color: #454a4c; cursor: not-allowed; }
 .library-actions .edit-action { border-right: 0; color: var(--lime); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
-/* Pulse Labs */
+/* Laptiva Labs */
 .version-unlock-button { margin: -8px 0; padding: 8px 0; border: 0; color: inherit; background: transparent; font-size: inherit; }
 .version-unlock-button:hover { color: var(--lime); }
 .version-unlock-status { display: block; min-height: 14px; margin-top: 5px; color: var(--lime); font-size: 9px; font-weight: 800; }
@@ -877,7 +885,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .labs-header > span:last-child { width: 45px; }
 .labs-content { display: grid; gap: 18px; padding: 0 16px calc(42px + env(safe-area-inset-bottom)); }
 .labs-intro { margin: 0 -4px; padding: 27px 22px; border-radius: 26px; color: var(--ink); background: var(--lime); }
-.labs-intro h1 { margin: 5px 0 9px; font-size: clamp(45px, 12vw, 72px); font-weight: 1000; line-height: .88; letter-spacing: -.075em; }
+.labs-intro h1 { margin: 5px 0 9px; font-size: clamp(40px, 11vw, 68px); font-weight: 1000; line-height: .88; letter-spacing: -.075em; }
 .labs-intro > p:last-child { max-width: 560px; margin: 0; color: #354020; font-size: 13px; font-weight: 750; line-height: 1.45; }
 .labs-panel { overflow: hidden; padding: 18px; border: 1px solid #303739; border-radius: 22px; background: var(--ink-soft); }
 .labs-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }

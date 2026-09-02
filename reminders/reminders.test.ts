@@ -36,7 +36,8 @@ test('creates a recurring iCalendar event with an operating-system alarm', () =>
   assert.match(calendar, /DTSTART:20260831T180000/);
   assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
   assert.match(calendar, /BEGIN:VALARM\r\nTRIGGER:PT0M/);
-  assert.match(calendar, /SUMMARY:Pulse workout/);
+  assert.match(calendar, /PRODID:-\/\/Laptiva Interval Timer\/\/Workout Reminders 1\.4\/\/EN/);
+  assert.match(calendar, /SUMMARY:Laptiva workout/);
 });
 
 test('creates a text/calendar URL that browsers can open for calendar import', () => {
@@ -58,13 +59,13 @@ test('uses localized copy in calendar content while keeping recurrence codes sta
     '18:00',
     new Date(2026, 7, 30, 12, 0),
     {
-      summary: 'Entrenamiento Pulse',
-      description: 'Abrí Pulse y completá un entrenamiento por intervalos.',
-      alarmDescription: 'Es hora de tu entrenamiento Pulse.',
+      summary: 'Entrenamiento Laptiva',
+      description: 'Abrí Laptiva y completá un entrenamiento por intervalos.',
+      alarmDescription: 'Es hora de tu entrenamiento Laptiva.',
     },
   );
 
-  assert.match(calendar, /SUMMARY:Entrenamiento Pulse/);
-  assert.match(calendar, /DESCRIPTION:Abrí Pulse y completá/);
+  assert.match(calendar, /SUMMARY:Entrenamiento Laptiva/);
+  assert.match(calendar, /DESCRIPTION:Abrí Laptiva y completá/);
   assert.match(calendar, /RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR/);
 });

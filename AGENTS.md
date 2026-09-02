@@ -2,7 +2,7 @@
 
 ## Deployment
 
-Publish Pulse through the existing GitHub Pages workflow only. Do not create, update, or deploy a ChatGPT Sites version of this project.
+Publish Laptiva through the existing GitHub Pages workflow only. Do not create, update, or deploy a ChatGPT Sites version of this project.
 
 ## Public-repository safety
 

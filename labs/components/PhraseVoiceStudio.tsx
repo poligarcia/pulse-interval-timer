@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND_NAME } from '../../branding.ts';
 import {
   COACH_PERSONALITIES,
   getSpeechTuning,
@@ -213,7 +214,7 @@ export function PhraseVoiceStudio({ controller, status }: { controller: ModelCon
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'pulse-labs-phrase-candidates.json';
+    link.download = 'laptiva-labs-phrase-candidates.json';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -268,7 +269,7 @@ export function PhraseVoiceStudio({ controller, status }: { controller: ModelCon
       {quoteConsent && (
         <div className="labs-consent" role="group" aria-labelledby="quote-consent-title">
           <h3 id="quote-consent-title">Download the quote LoRA?</h3>
-          <p>This optional adapter adds approximately {Math.round(MENTRIA_QUOTES_ADAPTER_SIZE_BYTES / 1_048_576)} MB. Pulse will fetch only its pinned config and weights and cache them locally.</p>
+          <p>This optional adapter adds approximately {Math.round(MENTRIA_QUOTES_ADAPTER_SIZE_BYTES / 1_048_576)} MB. {BRAND_NAME} will fetch only its pinned config and weights and cache them locally.</p>
           <div className="labs-actions"><button className="labs-primary-button" disabled={status.kind !== 'ready'} onClick={() => { void approveQuoteAdapter(); }}>Download and switch</button><button className="labs-secondary-button" onClick={() => { setQuoteConsent(false); setDesiredAdapter(readyAdapter ?? 'base'); }}>Cancel</button></div>
         </div>
       )}
@@ -289,7 +290,7 @@ export function PhraseVoiceStudio({ controller, status }: { controller: ModelCon
       )}
 
       <article className="labs-result deterministic-result" aria-labelledby="deterministic-phrase-title">
-        <small id="deterministic-phrase-title">CURRENT DETERMINISTIC PULSE PHRASE</small>
+        <small id="deterministic-phrase-title">CURRENT DETERMINISTIC {BRAND_NAME.toUpperCase()} PHRASE</small>
         <p>{deterministicPhrase}</p>
         <button className="labs-secondary-button" onClick={() => preview(deterministicPhrase)}>Preview production comparison</button>
       </article>

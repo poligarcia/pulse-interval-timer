@@ -1,6 +1,6 @@
 # Mentria runtime and model provenance
 
-Pulse Labs uses Mentria as an open-source browser runtime and model-bundle
+Laptiva Labs uses Mentria as an open-source browser runtime and model-bundle
 source. This factual credit does not imply a partnership, sponsorship, or
 endorsement.
 
@@ -12,7 +12,7 @@ endorsement.
 - Vendored directory: `public/mentria/dist/`
 - License source: repository-root `LICENSE`
 - License: MIT
-- Modifications: none. Pulse copies the complete upstream `dist` directory
+- Modifications: none. Laptiva copies the complete upstream `dist` directory
   from this revision without editing its files.
 
 The runtime is dynamically imported only after explicit model-download
@@ -30,7 +30,7 @@ work at the local root and the GitHub Pages `/pulse-interval-timer/` base path.
 - Optional quote LoRA: `loras/quotes/adapter_config.json` and
   `loras/quotes/adapter_model.safetensors`
 
-Pulse pins every request to that revision. Pulse does not configure or request
+Laptiva pins every request to that revision. Laptiva does not configure or request
 `qwen3.5-0.8b-vl-q4.safetensors`, and the model load options contain no vision
 URL, vision shard, or image preprocessing configuration.
 
@@ -39,10 +39,10 @@ URL, vision shard, or image preprocessing configuration.
 - Upstream Qwen model: https://huggingface.co/Qwen/Qwen3.5-0.8B
 - License: Apache License 2.0
 - Quote dataset: https://huggingface.co/datasets/mentriaai/motivational-quotes
-- Exact dataset revision used by Pulse's existing static phrase attribution:
+- Exact dataset revision used by Laptiva's existing static phrase attribution:
   `00cc851eefc94aedb3a3b32f4cc63ed3a48dfb86`
 - Dataset license: Apache License 2.0
 
 The optional 0.8B quote LoRA is distributed inside the pinned Mentria model
 snapshot above. The static production phrases remain separate from all Labs
-candidate output and remain Pulse's workout fallback.
+candidate output and remain Laptiva's workout fallback.

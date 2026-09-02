@@ -11,7 +11,7 @@ export type AppMessages = {
   shell: {
     title: string;
     description: string;
-    openingPulse: string;
+    openingApp: string;
     splashTagline: string;
   };
   common: {
@@ -221,7 +221,7 @@ export type AppMessages = {
     soundEffectsHelper: string;
     soundScheme: string;
     soundSchemeHelper: string;
-    pulseBeep: string;
+    appBeep: string;
     appVolume: string;
     tickingSound: string;
     tickingHelper: string;
@@ -268,7 +268,7 @@ export type AppMessages = {
     calendarHandlesDelivery: string;
     reminderTimeAria: string;
     addRemindersToCalendar: string;
-    worksAfterPulseCloses: string;
+    worksAfterAppCloses: string;
     reminderPrivacyNote: string;
     calendarEvent: WorkoutReminderCalendarCopy;
   };
@@ -284,9 +284,9 @@ export type AppMessages = {
 
 const en: AppMessages = {
   shell: {
-    title: 'Pulse — Interval Timer',
+    title: 'Laptiva — Interval Timer',
     description: 'Custom interval workouts with rounds, cycles, progress, reminders, and offline support.',
-    openingPulse: 'Opening Pulse', splashTagline: 'Interval training',
+    openingApp: 'Opening Laptiva', splashTagline: 'Interval training',
   },
   common: {
     back: 'Back', cancel: 'Cancel', done: 'Done', edit: 'Edit', home: 'Home', new: 'New',
@@ -362,7 +362,7 @@ const en: AppMessages = {
     journalKicker: 'JOURNAL', workoutHistory: 'Workout history',
     sessions: (count) => `${count} ${count === 1 ? 'session' : 'sessions'}`,
     emptyTitle: 'Your first workout starts the story.',
-    emptyBody: 'Finish a timer or save a partial session and Pulse will add it here.', chooseTimer: 'Choose a timer',
+    emptyBody: 'Finish a timer or save a partial session and Laptiva will add it here.', chooseTimer: 'Choose a timer',
     trainingAndActive: (training, active) => `${training} training · ${active} active`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
     partialSession: 'Partial',
@@ -405,32 +405,32 @@ const en: AppMessages = {
     otherSystemVoices: 'Other system voices', effect: 'effect', testCoach: 'Test coach',
     previewCoach: (surprise) => `Preview ${surprise ? 'a surprise personality' : 'this personality'} and voice`, play: 'Play',
     ducking: 'Ducking', duckingHelper: 'Reduce other music during cues', duckingUnavailable: 'Ducking unavailable',
-    voiceNote: (language) => `Pulse uses this device’s ${language} system voices. Automatic avoids known effect voices and keeps one concrete voice for the entire workout.`,
+    voiceNote: (language) => `Laptiva uses this device’s ${language} system voices. Automatic avoids known effect voices and keeps one concrete voice for the entire workout.`,
     noCompatibleVoice: (language) => `No ${language} system voice was listed. Automatic will ask the device for its best available voice.`,
-    musicNote: 'Web apps on iOS cannot change the volume of Spotify, Apple Music, or another app. Pulse can only control its own sounds.',
+    musicNote: 'Web apps on iOS cannot change the volume of Spotify, Apple Music, or another app. Laptiva can only control its own sounds.',
   },
   audioSettings: {
     kicker: 'AUDIO', soundEffects: 'Sound effects', soundEffectsHelper: 'Phase cues and finish signal',
-    soundScheme: 'Sound scheme', soundSchemeHelper: 'One built-in synthetic scheme', pulseBeep: 'Pulse beep',
+    soundScheme: 'Sound scheme', soundSchemeHelper: 'One built-in synthetic scheme', appBeep: 'Laptiva beep',
     appVolume: 'App volume', tickingSound: 'Ticking sound', tickingHelper: 'One quiet tick every second',
-    silentModeNote: 'On iPhone, synthetic Web Audio respects Silent Mode. Turn Silent Mode off to hear Pulse cues.',
+    silentModeNote: 'On iPhone, synthetic Web Audio respects Silent Mode. Turn Silent Mode off to hear Laptiva cues.',
   },
   displaySettings: {
     kicker: 'DISPLAY', rotation: 'Rotation', rotationHelper: 'Allow landscape during a workout',
     rotationAria: 'Allow screen rotation',
-    orientationNote: 'Orientation locking depends on iOS and works best when Pulse is opened from the Home Screen.',
+    orientationNote: 'Orientation locking depends on iOS and works best when Laptiva is opened from the Home Screen.',
   },
   experimentalSettings: {
     kicker: 'EXPERIMENTAL', labsHelper: 'Local Mentria text experiments and system-voice previews', open: 'Open',
     labsNote: 'Opening Labs never downloads or initializes a model. Model assets require a separate confirmation.',
   },
   about: {
-    versionAria: (version) => `Pulse version ${version}`, version: 'Version',
+    versionAria: (version) => `Laptiva version ${version}`, version: 'Version',
     installablePwa: 'Installable PWA', contentCredits: 'Content credits',
   },
   settings: {
     eyebrow: 'PREFERENCES', title: 'Settings', languageKicker: 'LANGUAGE', appLanguage: 'App language',
-    languageHelper: 'Changes Pulse on this device', appLanguageAria: 'App language',
+    languageHelper: 'Changes Laptiva on this device', appLanguageAria: 'App language',
     trainingKicker: 'TRAINING', activeDaysPerWeek: 'Active days per week',
     activeDaysGoalHelper: 'Sets your goal streak and milestone pace', weeklyGoalAria: 'Weekly active-day goal',
     decreaseWeeklyGoal: 'Decrease weekly active-day goal', increaseWeeklyGoal: 'Increase weekly active-day goal', perWeek: '/ week',
@@ -444,16 +444,16 @@ const en: AppMessages = {
     },
     reminderTime: 'Reminder time', calendarHandlesDelivery: 'Your calendar handles delivery',
     reminderTimeAria: 'Workout reminder time', addRemindersToCalendar: 'Add reminders to Calendar',
-    worksAfterPulseCloses: 'Works after Pulse is closed',
-    reminderPrivacyNote: 'Calendar reminders keep Pulse completely static and private. Edit or remove the recurring event in your calendar app.',
+    worksAfterAppCloses: 'Works after Laptiva is closed',
+    reminderPrivacyNote: 'Calendar reminders keep Laptiva completely static and private. Edit or remove the recurring event in your calendar app.',
     calendarEvent: {
-      summary: 'Pulse workout', description: 'Open Pulse and complete a focused interval workout.',
-      alarmDescription: 'Time for your Pulse workout.',
+      summary: 'Laptiva workout', description: 'Open Laptiva and complete a focused interval workout.',
+      alarmDescription: 'Time for your Laptiva workout.',
     },
   },
   status: {
-    openingLabs: 'Opening Pulse Labs…', labsUnlocked: 'Pulse Labs unlocked.',
-    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'tap' : 'taps'} until Pulse Labs.`,
+    openingLabs: 'Opening Laptiva Labs…', labsUnlocked: 'Laptiva Labs unlocked.',
+    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'tap' : 'taps'} until Laptiva Labs.`,
     calendarOpened: 'Calendar opened. On iPhone, finish adding the recurring event.',
     calendarError: 'The calendar reminder could not be created on this device.',
     deleteHistory: (timerName) => `Delete ${timerName} from workout history?`,
@@ -462,9 +462,9 @@ const en: AppMessages = {
 
 const esAR: AppMessages = {
   shell: {
-    title: 'Pulse — Timer de intervalos',
+    title: 'Laptiva — Timer de intervalos',
     description: 'Entrenamientos por intervalos con rondas, ciclos, progreso, recordatorios y uso sin conexión.',
-    openingPulse: 'Abriendo Pulse', splashTagline: 'Entrenamiento por intervalos',
+    openingApp: 'Abriendo Laptiva', splashTagline: 'Entrenamiento por intervalos',
   },
   common: {
     back: 'Atrás', cancel: 'Cancelar', done: 'Listo', edit: 'Editar', home: 'Inicio', new: 'Nuevo',
@@ -540,7 +540,7 @@ const esAR: AppMessages = {
     journalKicker: 'REGISTRO', workoutHistory: 'Historial de entrenamientos',
     sessions: (count) => `${count} ${count === 1 ? 'sesión' : 'sesiones'}`,
     emptyTitle: 'Tu primer entrenamiento empieza la historia.',
-    emptyBody: 'Completá un timer o guardá una sesión parcial y Pulse la agregará acá.', chooseTimer: 'Elegir un timer',
+    emptyBody: 'Completá un timer o guardá una sesión parcial y Laptiva la agregará acá.', chooseTimer: 'Elegir un timer',
     trainingAndActive: (training, active) => `${training} de entrenamiento · ${active} activos`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
     partialSession: 'Parcial',
@@ -583,32 +583,32 @@ const esAR: AppMessages = {
     otherSystemVoices: 'Otras voces del sistema', effect: 'efecto', testCoach: 'Probar coach',
     previewCoach: (surprise) => `Escuchá ${surprise ? 'una personalidad sorpresa' : 'esta personalidad'} y su voz`, play: 'Reproducir',
     ducking: 'Atenuación', duckingHelper: 'Reduce otra música durante las indicaciones', duckingUnavailable: 'Atenuación no disponible',
-    voiceNote: (language) => `Pulse usa las voces del sistema en ${language} disponibles en este dispositivo. Automático evita voces con efectos y mantiene la misma voz durante todo el entrenamiento.`,
+    voiceNote: (language) => `Laptiva usa las voces del sistema en ${language} disponibles en este dispositivo. Automático evita voces con efectos y mantiene la misma voz durante todo el entrenamiento.`,
     noCompatibleVoice: (language) => `No se detectó una voz del sistema en ${language}. Automático le pedirá al dispositivo la mejor voz disponible.`,
-    musicNote: 'Las apps web en iOS no pueden cambiar el volumen de Spotify, Apple Music u otra app. Pulse sólo puede controlar sus propios sonidos.',
+    musicNote: 'Las apps web en iOS no pueden cambiar el volumen de Spotify, Apple Music u otra app. Laptiva sólo puede controlar sus propios sonidos.',
   },
   audioSettings: {
     kicker: 'AUDIO', soundEffects: 'Efectos de sonido', soundEffectsHelper: 'Indicaciones de fase y señal final',
-    soundScheme: 'Esquema de sonido', soundSchemeHelper: 'Un esquema sintético incorporado', pulseBeep: 'Beep de Pulse',
+    soundScheme: 'Esquema de sonido', soundSchemeHelper: 'Un esquema sintético incorporado', appBeep: 'Beep de Laptiva',
     appVolume: 'Volumen de la app', tickingSound: 'Sonido de tic', tickingHelper: 'Un tic suave por segundo',
-    silentModeNote: 'En iPhone, el audio sintético respeta el modo Silencio. Desactivalo para escuchar las indicaciones de Pulse.',
+    silentModeNote: 'En iPhone, el audio sintético respeta el modo Silencio. Desactivalo para escuchar las indicaciones de Laptiva.',
   },
   displaySettings: {
     kicker: 'PANTALLA', rotation: 'Rotación', rotationHelper: 'Permite usar el entrenamiento en horizontal',
     rotationAria: 'Permitir rotación de pantalla',
-    orientationNote: 'El bloqueo de orientación depende de iOS y funciona mejor cuando abrís Pulse desde la pantalla de inicio.',
+    orientationNote: 'El bloqueo de orientación depende de iOS y funciona mejor cuando abrís Laptiva desde la pantalla de inicio.',
   },
   experimentalSettings: {
     kicker: 'EXPERIMENTAL', labsHelper: 'Experimentos locales de texto de Mentria y pruebas de voces del sistema', open: 'Abrir',
     labsNote: 'Abrir Labs nunca descarga ni inicializa un modelo. Los archivos del modelo requieren una confirmación aparte.',
   },
   about: {
-    versionAria: (version) => `Pulse versión ${version}`, version: 'Versión',
+    versionAria: (version) => `Laptiva versión ${version}`, version: 'Versión',
     installablePwa: 'PWA instalable', contentCredits: 'Créditos de contenido',
   },
   settings: {
     eyebrow: 'PREFERENCIAS', title: 'Ajustes', languageKicker: 'IDIOMA', appLanguage: 'Idioma de la app',
-    languageHelper: 'Cambia Pulse en este dispositivo', appLanguageAria: 'Idioma de la app',
+    languageHelper: 'Cambia Laptiva en este dispositivo', appLanguageAria: 'Idioma de la app',
     trainingKicker: 'ENTRENAMIENTO', activeDaysPerWeek: 'Días activos por semana',
     activeDaysGoalHelper: 'Define el ritmo de tu objetivo y tus hitos', weeklyGoalAria: 'Objetivo semanal de días activos',
     decreaseWeeklyGoal: 'Reducir el objetivo semanal de días activos', increaseWeeklyGoal: 'Aumentar el objetivo semanal de días activos', perWeek: '/ semana',
@@ -622,16 +622,16 @@ const esAR: AppMessages = {
     },
     reminderTime: 'Hora del recordatorio', calendarHandlesDelivery: 'Tu calendario se encarga de avisarte',
     reminderTimeAria: 'Hora del recordatorio de entrenamiento', addRemindersToCalendar: 'Agregar recordatorios al calendario',
-    worksAfterPulseCloses: 'Funciona aunque cierres Pulse',
-    reminderPrivacyNote: 'Los recordatorios de calendario mantienen Pulse completamente estático y privado. Editá o eliminá el evento recurrente desde tu app de calendario.',
+    worksAfterAppCloses: 'Funciona aunque cierres Laptiva',
+    reminderPrivacyNote: 'Los recordatorios de calendario mantienen Laptiva completamente estática y privada. Editá o eliminá el evento recurrente desde tu app de calendario.',
     calendarEvent: {
-      summary: 'Entrenamiento Pulse', description: 'Abrí Pulse y completá un entrenamiento por intervalos.',
-      alarmDescription: 'Es hora de tu entrenamiento Pulse.',
+      summary: 'Entrenamiento Laptiva', description: 'Abrí Laptiva y completá un entrenamiento por intervalos.',
+      alarmDescription: 'Es hora de tu entrenamiento Laptiva.',
     },
   },
   status: {
-    openingLabs: 'Abriendo Pulse Labs…', labsUnlocked: 'Pulse Labs desbloqueado.',
-    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'toque' : 'toques'} para llegar a Pulse Labs.`,
+    openingLabs: 'Abriendo Laptiva Labs…', labsUnlocked: 'Laptiva Labs desbloqueado.',
+    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'toque' : 'toques'} para llegar a Laptiva Labs.`,
     calendarOpened: 'Se abrió el calendario. En iPhone, terminá de agregar el evento recurrente.',
     calendarError: 'No se pudo crear el recordatorio de calendario en este dispositivo.',
     deleteHistory: (timerName) => `¿Eliminar ${timerName} del historial de entrenamientos?`,
@@ -640,9 +640,9 @@ const esAR: AppMessages = {
 
 const ptBR: AppMessages = {
   shell: {
-    title: 'Pulse — Timer intervalado',
+    title: 'Laptiva — Timer intervalado',
     description: 'Treinos intervalados com rodadas, ciclos, progresso, lembretes e uso offline.',
-    openingPulse: 'Abrindo o Pulse', splashTagline: 'Treino intervalado',
+    openingApp: 'Abrindo a Laptiva', splashTagline: 'Treino intervalado',
   },
   common: {
     back: 'Voltar', cancel: 'Cancelar', done: 'Concluir', edit: 'Editar', home: 'Início', new: 'Novo',
@@ -718,7 +718,7 @@ const ptBR: AppMessages = {
     journalKicker: 'REGISTRO', workoutHistory: 'Histórico de treinos',
     sessions: (count) => `${count} ${count === 1 ? 'sessão' : 'sessões'}`,
     emptyTitle: 'Seu primeiro treino começa a história.',
-    emptyBody: 'Conclua um timer ou salve uma sessão parcial e o Pulse vai adicioná-la aqui.', chooseTimer: 'Escolher um timer',
+    emptyBody: 'Conclua um timer ou salve uma sessão parcial e a Laptiva vai adicioná-la aqui.', chooseTimer: 'Escolher um timer',
     trainingAndActive: (training, active) => `${training} de treino · ${active} ativos`,
     roundsAndCycles: (rounds, cycles) => `${rounds}R · ${cycles}C`,
     partialSession: 'Parcial',
@@ -761,32 +761,32 @@ const ptBR: AppMessages = {
     otherSystemVoices: 'Outras vozes do sistema', effect: 'efeito', testCoach: 'Testar coach',
     previewCoach: (surprise) => `Ouça ${surprise ? 'uma personalidade surpresa' : 'esta personalidade'} e sua voz`, play: 'Reproduzir',
     ducking: 'Atenuação', duckingHelper: 'Reduz outra música durante os avisos', duckingUnavailable: 'Atenuação indisponível',
-    voiceNote: (language) => `O Pulse usa as vozes do sistema em ${language} disponíveis neste dispositivo. A opção Automática evita vozes com efeitos e mantém a mesma voz durante todo o treino.`,
+    voiceNote: (language) => `A Laptiva usa as vozes do sistema em ${language} disponíveis neste dispositivo. A opção Automática evita vozes com efeitos e mantém a mesma voz durante todo o treino.`,
     noCompatibleVoice: (language) => `Nenhuma voz do sistema em ${language} foi detectada. A opção Automática solicitará ao dispositivo a melhor voz disponível.`,
-    musicNote: 'Apps web no iOS não podem alterar o volume do Spotify, Apple Music ou outro app. O Pulse só pode controlar os próprios sons.',
+    musicNote: 'Apps web no iOS não podem alterar o volume do Spotify, Apple Music ou outro app. A Laptiva só pode controlar os próprios sons.',
   },
   audioSettings: {
     kicker: 'ÁUDIO', soundEffects: 'Efeitos sonoros', soundEffectsHelper: 'Avisos de fase e sinal de conclusão',
-    soundScheme: 'Esquema de som', soundSchemeHelper: 'Um esquema sintético integrado', pulseBeep: 'Beep do Pulse',
+    soundScheme: 'Esquema de som', soundSchemeHelper: 'Um esquema sintético integrado', appBeep: 'Beep da Laptiva',
     appVolume: 'Volume do app', tickingSound: 'Som de tique', tickingHelper: 'Um tique suave por segundo',
-    silentModeNote: 'No iPhone, o áudio sintético respeita o modo Silencioso. Desative-o para ouvir os avisos do Pulse.',
+    silentModeNote: 'No iPhone, o áudio sintético respeita o modo Silencioso. Desative-o para ouvir os avisos da Laptiva.',
   },
   displaySettings: {
     kicker: 'TELA', rotation: 'Rotação', rotationHelper: 'Permite usar o treino na horizontal',
     rotationAria: 'Permitir rotação da tela',
-    orientationNote: 'O bloqueio de orientação depende do iOS e funciona melhor quando o Pulse é aberto pela Tela de Início.',
+    orientationNote: 'O bloqueio de orientação depende do iOS e funciona melhor quando a Laptiva é aberta pela Tela de Início.',
   },
   experimentalSettings: {
     kicker: 'EXPERIMENTAL', labsHelper: 'Experimentos locais de texto da Mentria e testes de vozes do sistema', open: 'Abrir',
     labsNote: 'Abrir o Labs nunca baixa nem inicializa um modelo. Os arquivos do modelo exigem uma confirmação separada.',
   },
   about: {
-    versionAria: (version) => `Pulse versão ${version}`, version: 'Versão',
+    versionAria: (version) => `Laptiva versão ${version}`, version: 'Versão',
     installablePwa: 'PWA instalável', contentCredits: 'Créditos de conteúdo',
   },
   settings: {
     eyebrow: 'PREFERÊNCIAS', title: 'Ajustes', languageKicker: 'IDIOMA', appLanguage: 'Idioma do app',
-    languageHelper: 'Altera o Pulse neste dispositivo', appLanguageAria: 'Idioma do app',
+    languageHelper: 'Altera a Laptiva neste dispositivo', appLanguageAria: 'Idioma do app',
     trainingKicker: 'TREINO', activeDaysPerWeek: 'Dias ativos por semana',
     activeDaysGoalHelper: 'Define o ritmo da sua meta e dos seus marcos', weeklyGoalAria: 'Meta semanal de dias ativos',
     decreaseWeeklyGoal: 'Diminuir meta semanal de dias ativos', increaseWeeklyGoal: 'Aumentar meta semanal de dias ativos', perWeek: '/ semana',
@@ -800,16 +800,16 @@ const ptBR: AppMessages = {
     },
     reminderTime: 'Horário do lembrete', calendarHandlesDelivery: 'Seu calendário envia a notificação',
     reminderTimeAria: 'Horário do lembrete de treino', addRemindersToCalendar: 'Adicionar lembretes ao calendário',
-    worksAfterPulseCloses: 'Funciona mesmo depois de fechar o Pulse',
-    reminderPrivacyNote: 'Os lembretes do calendário mantêm o Pulse completamente estático e privado. Edite ou exclua o evento recorrente no seu app de calendário.',
+    worksAfterAppCloses: 'Funciona mesmo depois de fechar a Laptiva',
+    reminderPrivacyNote: 'Os lembretes do calendário mantêm a Laptiva completamente estática e privada. Edite ou exclua o evento recorrente no seu app de calendário.',
     calendarEvent: {
-      summary: 'Treino Pulse', description: 'Abra o Pulse e conclua um treino intervalado.',
-      alarmDescription: 'Hora do seu treino Pulse.',
+      summary: 'Treino Laptiva', description: 'Abra a Laptiva e conclua um treino intervalado.',
+      alarmDescription: 'Hora do seu treino Laptiva.',
     },
   },
   status: {
-    openingLabs: 'Abrindo o Pulse Labs…', labsUnlocked: 'Pulse Labs desbloqueado.',
-    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'toque' : 'toques'} para chegar ao Pulse Labs.`,
+    openingLabs: 'Abrindo o Laptiva Labs…', labsUnlocked: 'Laptiva Labs desbloqueado.',
+    tapsUntilLabs: (count) => `${count} ${count === 1 ? 'toque' : 'toques'} para chegar ao Laptiva Labs.`,
     calendarOpened: 'O calendário foi aberto. No iPhone, conclua a adição do evento recorrente.',
     calendarError: 'Não foi possível criar o lembrete de calendário neste dispositivo.',
     deleteHistory: (timerName) => `Excluir ${timerName} do histórico de treinos?`,

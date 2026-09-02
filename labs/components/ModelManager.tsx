@@ -1,5 +1,6 @@
 'use client';
 
+import { BRAND_NAME } from '../../branding.ts';
 import type { ModelController } from '../model/model-controller.ts';
 import {
   MENTRIA_QUOTES_ADAPTER_SIZE_BYTES,
@@ -32,7 +33,7 @@ export function ModelManager({ controller, status }: { controller: ModelControll
     : null;
 
   const deleteModel = async () => {
-    if (!window.confirm('Delete only the model and adapter assets owned by Pulse Labs? Timers, settings, candidates, and the offline app shell will stay.')) return;
+    if (!window.confirm(`Delete only the model and adapter assets owned by ${BRAND_NAME} Labs? Timers, settings, candidates, and the offline app shell will stay.`)) return;
     await controller.deleteModel();
   };
 
@@ -45,7 +46,7 @@ export function ModelManager({ controller, status }: { controller: ModelControll
       <p className="labs-status-copy" role="status" aria-live="polite">{statusCopy(status)}</p>
 
       {status.kind === 'unsupported' && (
-        <p className="labs-note">Phrase preview still works with this device&apos;s system voices. Pulse timers do not require WebGPU.</p>
+        <p className="labs-note">Phrase preview still works with this device&apos;s system voices. {BRAND_NAME} timers do not require WebGPU.</p>
       )}
 
       {status.kind === 'awaiting-consent' && (
@@ -79,7 +80,7 @@ export function ModelManager({ controller, status }: { controller: ModelControll
           <button className="labs-danger-button" disabled={busy} onClick={() => { void deleteModel(); }}>Delete model</button>
         )}
       </div>
-      <p className="labs-fine-print">Mentria supplies the open-source browser runtime and model bundle. Mentria does not sponsor or endorse Pulse. Generation stays in this browser after the pinned assets are retrieved.</p>
+      <p className="labs-fine-print">Mentria supplies the open-source browser runtime and model bundle. Mentria does not sponsor or endorse {BRAND_NAME}. Generation stays in this browser after the pinned assets are retrieved.</p>
     </section>
   );
 }

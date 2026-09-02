@@ -1,34 +1,35 @@
 import type { Metadata, Viewport } from 'next';
 import { SplashScreen } from '@/components/SplashScreen';
+import { BRAND_NAME } from '@/branding';
 import { LocaleProvider } from '@/i18n';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Pulse — Interval Timer',
+  title: `${BRAND_NAME} — Interval Timer`,
   description: 'Custom interval workouts with rounds, cycles, progress, reminders, and offline support.',
-  applicationName: 'Pulse',
+  applicationName: BRAND_NAME,
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Pulse',
+    title: BRAND_NAME,
   },
   formatDetection: { telephone: false },
   openGraph: {
     type: 'website',
-    title: 'Pulse — Interval Timer',
+    title: `${BRAND_NAME} — Interval Timer`,
     description: 'Make every second count with custom interval workouts.',
     url: 'https://poligarcia.github.io/pulse-interval-timer/',
-    siteName: 'Pulse',
+    siteName: BRAND_NAME,
     images: [{
       url: 'https://poligarcia.github.io/pulse-interval-timer/og.png',
       width: 1672,
       height: 941,
-      alt: 'Pulse Interval Timer',
+      alt: `${BRAND_NAME} Interval Timer`,
     }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Pulse — Interval Timer',
+    title: `${BRAND_NAME} — Interval Timer`,
     description: 'Make every second count with custom interval workouts.',
     images: ['https://poligarcia.github.io/pulse-interval-timer/og.png'],
   },

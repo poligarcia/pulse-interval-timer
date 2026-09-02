@@ -1,9 +1,9 @@
-PULSE THIRD-PARTY CONTENT NOTICES
+LAPTIVA THIRD-PARTY CONTENT NOTICES
 
 Mentria browser runtime
 -----------------------
 
-Pulse Labs vendors the complete Mentria browser runtime distribution without
+Laptiva Labs vendors the complete Mentria browser runtime distribution without
 modification.
 
 Source: https://github.com/mentria-ai/website
@@ -22,8 +22,8 @@ Source: https://huggingface.co/mentriaai/Qwen3.5-0.8B-mentria
 Pinned revision: b0bdedca9258b059b1b0f8cfbb2751d12bd8dab8
 License: Apache License 2.0
 
-Pulse requests only the tied text-language weight, tokenizer assets, and the
-optional quote LoRA from this exact revision. Pulse does not request the vision
+Laptiva requests only the tied text-language weight, tokenizer assets, and the
+optional quote LoRA from this exact revision. Laptiva does not request the vision
 tower. The quote LoRA has a separate download disclosure and consent step.
 
 Upstream Qwen3.5 0.8B
@@ -38,7 +38,7 @@ in public/mentria/SOURCE.md.
 Mentria Motivational Quotes
 ---------------------------
 
-Pulse includes a reviewed selection of 120 unmodified messages from the
+Laptiva includes a reviewed selection of 120 unmodified messages from the
 Mentria Motivational Quotes dataset.
 
 Source: https://huggingface.co/datasets/mentriaai/motivational-quotes
@@ -47,7 +47,7 @@ Source file: quotes.jsonl
 Dataset creator: Mentria
 License: Apache License 2.0
 
-The selection, stable identifiers, application integration, and Pulse
+The selection, stable identifiers, application integration, and Laptiva
 cooldown reflections are not part of the upstream dataset.
 
 

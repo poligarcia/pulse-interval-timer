@@ -7,6 +7,7 @@ function manifest(filename: string) {
     id: string;
     lang: string;
     name: string;
+    short_name: string;
     start_url: string;
   };
 }
@@ -18,6 +19,11 @@ test('localized manifests share one app identity and preserve their launch local
 
   assert.deepEqual([english.id, spanish.id, portuguese.id], ['./', './', './']);
   assert.deepEqual([english.lang, spanish.lang, portuguese.lang], ['en', 'es-AR', 'pt-BR']);
+  assert.deepEqual(
+    [english.short_name, spanish.short_name, portuguese.short_name],
+    ['Laptiva', 'Laptiva', 'Laptiva'],
+  );
+  assert.ok([english.name, spanish.name, portuguese.name].every((name) => name.startsWith('Laptiva — ')));
   assert.deepEqual(
     [english.start_url, spanish.start_url, portuguese.start_url],
     ['./?lang=en', './?lang=es', './?lang=pt'],

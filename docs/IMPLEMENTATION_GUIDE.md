@@ -1,16 +1,16 @@
-# Pulse Labs Implementation Guide
+# Laptiva Labs Implementation Guide
 
 **Version:** 1.0.0<br>
 **Last updated:** 2026-08-30<br>
 **Status:** Draft for implementation<br>
-**Application:** Pulse Interval Timer<br>
+**Application:** Laptiva Interval Timer<br>
 **Platform:** Static TypeScript/React PWA deployed through GitHub Pages
 
 ---
 
 ## 0. Purpose
 
-Pulse Labs is a hidden, explicitly experimental area for testing local Mentria AI capabilities without making the production timer depend on AI.
+Laptiva Labs is a hidden, explicitly experimental area for testing local Mentria AI capabilities without making the production timer depend on AI.
 
 The first release establishes a reusable local-model foundation and ships a Phrase & Voice Studio. Later increments add post-workout debriefs, a raw prompt playground, a coach-context simulator, and natural-language timer generation.
 
@@ -22,16 +22,16 @@ These decisions are part of the initial scope and should not be changed implicit
 
 | ID | Decision |
 |---|---|
-| DEC-001 | The feature is called **Pulse Labs**. Mentria is credited as the runtime/model source without suggesting a commercial partnership. |
+| DEC-001 | The feature is called **Laptiva Labs**. Mentria is credited as the runtime/model source without suggesting a commercial partnership. |
 | DEC-002 | Labs is unlocked by activating the Settings version label seven times within five seconds. |
 | DEC-003 | Unlocking Labs never downloads or initializes a model. |
 | DEC-004 | The initial model is Mentria Qwen3.5 0.8B, text-only. Vision is out of scope. |
 | DEC-005 | The user must explicitly approve the model download after seeing its approximate size. |
-| DEC-006 | Mentria generates text. Pulse continues using browser/system Speech Synthesis voices. |
+| DEC-006 | Mentria generates text. Laptiva continues using browser/system Speech Synthesis voices. |
 | DEC-007 | Inference never runs inside the active timer loop. Production timer correctness has priority over AI. |
 | DEC-008 | Prompts, generated text, ratings, and workout feedback remain local unless the user explicitly exports them. |
 | DEC-009 | Static production phrases remain the permanent fallback. |
-| DEC-010 | Pulse continues to deploy only through the existing GitHub Pages workflow. |
+| DEC-010 | Laptiva continues to deploy only through the existing GitHub Pages workflow. |
 
 ## 2. Existing integration points
 
@@ -66,7 +66,7 @@ Acceptance criteria:
 
 #### LAB-002 — Persistent discovery
 
-After unlock, Settings displays a normal Pulse Labs row on subsequent launches.
+After unlock, Settings displays a normal Laptiva Labs row on subsequent launches.
 
 Acceptance criteria:
 
@@ -136,7 +136,7 @@ Acceptance criteria:
 
 #### MODEL-004 — Pinned, text-only assets
 
-Pulse loads a reproducible, minimal model configuration.
+Laptiva loads a reproducible, minimal model configuration.
 
 Acceptance criteria:
 
@@ -151,9 +151,9 @@ Users can inspect and delete local AI storage.
 
 Acceptance criteria:
 
-- Model cache survives a normal Pulse service-worker update.
+- Model cache survives a normal Laptiva service-worker update.
 - “Delete model” terminates the engine first and deletes only caches/databases owned by the Labs runtime.
-- Normal Pulse app-shell caches are preserved.
+- Normal Laptiva app-shell caches are preserved.
 - Deletion reports success or a recoverable error.
 
 ### 3.3 Phrase & Voice Studio
@@ -187,7 +187,7 @@ Acceptance criteria:
 - Special tokens and wrapping quotes are stripped.
 - Output is trimmed and length-limited.
 - Empty or malformed output produces a retryable error.
-- Current deterministic Pulse phrasing can be shown for comparison.
+- Current deterministic Laptiva phrasing can be shown for comparison.
 
 #### PHRASE-003 — Candidate phrase pack
 
@@ -226,11 +226,11 @@ Acceptance criteria:
 
 #### DEBRIEF-002 — Fact-grounded AI summary
 
-Pulse computes workout facts; Mentria turns those facts into prose.
+Laptiva computes workout facts; Mentria turns those facts into prose.
 
 Acceptance criteria:
 
-- The prompt contains a structured fact object produced by Pulse.
+- The prompt contains a structured fact object produced by Laptiva.
 - The model is instructed not to invent metrics or medical advice.
 - Facts are displayed beside the generated summary.
 - Summary generation is user-triggered and never automatic.
@@ -263,7 +263,7 @@ Acceptance criteria:
 
 #### PLAY-002 — Coach context simulator
 
-Users can construct a `CoachContext`, generate a cue, and compare it with Pulse’s deterministic coach.
+Users can construct a `CoachContext`, generate a cue, and compare it with Laptiva’s deterministic coach.
 
 Acceptance criteria:
 
@@ -318,7 +318,7 @@ Acceptance criteria:
 #### SAFE-002 — Privacy
 
 - No analytics or telemetry is introduced.
-- Prompts and workout feedback are not transmitted to Pulse or Mentria servers.
+- Prompts and workout feedback are not transmitted to Laptiva or Mentria servers.
 - Network activity is limited to pinned runtime/model asset retrieval.
 - Export is explicit and user-initiated.
 
@@ -331,15 +331,15 @@ Acceptance criteria:
 
 #### SAFE-004 — Licensing
 
-- MIT and Apache 2.0 notices are distributed with Pulse.
+- MIT and Apache 2.0 notices are distributed with Laptiva.
 - Source repositories and exact revisions are recorded.
 - Modified vendored files are documented.
-- UI wording does not imply that Mentria endorses Pulse.
+- UI wording does not imply that Mentria endorses Laptiva.
 
 ## 4. Target architecture
 
 ```text
-Pulse Labs UI
+Laptiva Labs UI
     |
     +-- Phrase/voice studio --------> existing coach + Web Speech APIs
     |
@@ -364,7 +364,7 @@ Mentria client boundary
     +-- Cache Storage
 ```
 
-The model boundary must remain replaceable. UI components depend on a Pulse-owned interface, not directly on `MentriaEngine`.
+The model boundary must remain replaceable. UI components depend on a Laptiva-owned interface, not directly on `MentriaEngine`.
 
 ## 5. File plan
 
@@ -429,7 +429,7 @@ Every parser must treat storage as untrusted input. Invalid versions, records, t
 
 ### Phase 0 — Runtime spike
 
-Goal: prove Mentria works from Pulse’s real GitHub Pages base path before building product UI.
+Goal: prove Mentria works from Laptiva’s real GitHub Pages base path before building product UI.
 
 Tasks:
 
@@ -578,7 +578,7 @@ Goal: make the experimental feature safe to ship publicly.
 
 Tasks:
 
-1. Change service-worker cleanup to delete only obsolete app-shell caches with the Pulse app-cache prefix.
+1. Change service-worker cleanup to delete only obsolete app-shell caches with the legacy `pulse-app-` prefix.
 2. Preserve Labs model caches across app updates.
 3. Increment the app-shell cache version.
 4. Add all runtime, dependency, model, dataset, and upstream notices.
@@ -591,7 +591,7 @@ Tasks:
 
 ### 8.1 Base-path-safe runtime URLs
 
-Do not copy Mentria’s root-absolute `/assets/...` URLs. Pulse is deployed under a GitHub Pages subpath.
+Do not copy Mentria’s root-absolute `/assets/...` URLs. Laptiva is deployed under a GitHub Pages subpath.
 
 ```ts
 function publicAssetUrl(relativePath: string): string {
@@ -605,7 +605,7 @@ const workerUrl = publicAssetUrl('mentria/dist/worker.mjs');
 
 The runtime import must occur only after a user asks to load the model.
 
-### 8.2 Pulse-owned client boundary
+### 8.2 Laptiva-owned client boundary
 
 ```ts
 interface LocalTextModel {
@@ -655,7 +655,7 @@ Saved output records the relevant version. Prompt changes increment the version 
 
 ### 8.5 Grounded debrief facts
 
-The model must not calculate workout metrics. Pulse creates a fact object:
+The model must not calculate workout metrics. Laptiva creates a fact object:
 
 ```ts
 type WorkoutFacts = {
@@ -674,7 +674,7 @@ type WorkoutFacts = {
 };
 ```
 
-Any comparison with previous sessions is calculated by Pulse and included explicitly.
+Any comparison with previous sessions is calculated by Laptiva and included explicitly.
 
 ### 8.6 Strict timer proposals
 
@@ -722,7 +722,7 @@ keys
   .map((key) => caches.delete(key));
 ```
 
-Model deletion must use an explicit allowlist discovered during the runtime spike. It must not broadly delete every cache containing generic strings such as `transformers` unless Pulse created that cache.
+Model deletion must use an explicit allowlist discovered during the runtime spike. It must not broadly delete every cache containing generic strings such as `transformers` unless Laptiva created that cache.
 
 ## 9. Error and recovery behavior
 
@@ -771,7 +771,7 @@ Before a commit or push, also follow the public-repository checks in `AGENTS.md`
 
 Labs experiments do not graduate merely because they work once.
 
-An experiment may move into normal Pulse UI only when:
+An experiment may move into normal Laptiva UI only when:
 
 - Its P0 and P1 tests pass.
 - Unsupported-device behavior is complete.
@@ -809,4 +809,4 @@ An experiment may move into normal Pulse UI only when:
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0.0 | 2026-08-30 | Initial implementation guide for Pulse Labs and Mentria experiments. |
+| 1.0.0 | 2026-08-30 | Initial implementation guide for Laptiva Labs and Mentria experiments. |

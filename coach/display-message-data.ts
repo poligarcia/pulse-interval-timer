@@ -1,3 +1,5 @@
+import { BRAND_COACH_NAME } from '../branding.ts';
+
 export type DisplayMessageData = {
   id: string;
   text: string;
@@ -9,7 +11,7 @@ function mentria(id: string, text: string): DisplayMessageData {
 }
 
 function pulse(id: string, text: string): DisplayMessageData {
-  return { id, text, author: 'Pulse Coach' };
+  return { id, text, author: BRAND_COACH_NAME };
 }
 
 // Curated from the pinned Mentria Motivational Quotes dataset. See
@@ -137,7 +139,7 @@ export const MOTIVATIONAL_MESSAGES: DisplayMessageData[] = [
   mentria('motivation-120', 'Slow progress is still traffic moving.'),
 ];
 
-// Workout-specific cooldown copy authored for Pulse.
+// Workout-specific cooldown copy authored for Laptiva.
 export const ASPIRATIONAL_MESSAGES: DisplayMessageData[] = [
   pulse('aspiration-001', 'Let your breathing settle. Notice what felt difficult, what became easier, and one small thing you want to carry into the next session.'),
   pulse('aspiration-002', 'The work is finished; the adaptation is beginning. Give your body time to slow down and acknowledge the effort you chose to make today.'),

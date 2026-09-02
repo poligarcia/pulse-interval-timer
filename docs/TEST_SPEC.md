@@ -1,16 +1,16 @@
-# Pulse Labs Test Specification
+# Laptiva Labs Test Specification
 
 **Version:** 1.0.0<br>
 **Last updated:** 2026-08-30<br>
 **Status:** Draft<br>
-**Scope:** Pulse Labs and Mentria local-model experiments<br>
+**Scope:** Laptiva Labs and Mentria local-model experiments<br>
 **Implementation source:** `docs/IMPLEMENTATION_GUIDE.md`
 
 ---
 
 ## 0. Purpose
 
-This specification defines how Pulse Labs is verified before release. It maps the stable requirement IDs from the implementation guide to automated and manual tests, with special emphasis on:
+This specification defines how Laptiva Labs is verified before release. It maps the stable requirement IDs from the implementation guide to automated and manual tests, with special emphasis on:
 
 - Production timer independence.
 - Explicit model-download consent.
@@ -32,7 +32,7 @@ A Labs build is not releasable until every P0 test passes and every failed or bl
 | Component/integration | React test harness or browser automation with fake model client | UI-to-controller, storage, speech mocks | Every Labs change |
 | Browser E2E | Playwright, using a fake model client in CI | Unlock, navigation, consent, phrase, debrief, timer proposal | Pull requests and release candidates |
 | Real WebGPU | Manual real-device runs | Runtime, download, GPU, adapter, cache, offline | Runtime changes and release candidates |
-| Regression | Existing automated suite plus manual timer smoke tests | Production Pulse behavior | Every release candidate |
+| Regression | Existing automated suite plus manual timer smoke tests | Production Laptiva behavior | Every release candidate |
 
 Real model weights are not required in ordinary CI. CI should inject a deterministic `LocalTextModel` fake. Actual Mentria runtime tests run on supported hardware because generic CI runners may not expose stable WebGPU adapters.
 
@@ -336,7 +336,7 @@ E2E tests should use a fake model client selected only by test configuration. Pr
 2. Activate the version label twice.
 3. Assert no hint and no Labs row.
 4. Activate a third time.
-5. Assert “4 taps until Pulse Labs” is announced.
+5. Assert “4 taps until Laptiva Labs” is announced.
 6. Activate four more times within the window.
 7. Assert Labs is unlocked and its Settings row appears.
 8. Reload and assert the row remains.
@@ -388,7 +388,7 @@ E2E tests should use a fake model client selected only by test configuration. Pr
 1. Load fake model.
 2. Choose personality, zone, intent, and adapter.
 3. Generate.
-4. Verify cleaned AI phrase and deterministic Pulse phrase are separately labeled.
+4. Verify cleaned AI phrase and deterministic Laptiva phrase are separately labeled.
 5. Preview both.
 
 ### E2E-008 — Save candidate phrase
@@ -488,7 +488,7 @@ These checks evaluate clarity and trust rather than implementation mechanics.
 | GPU-007 | Repeated generations | No unbounded memory growth or crash across 20 short generations | P1 |
 | GPU-008 | Exit Labs | Worker/GPU released; cached assets retained | P0 |
 | GPU-009 | Background/foreground | Recover or show actionable error after suspension | P1 |
-| GPU-010 | Low-memory/device loss | Normal Pulse remains usable after failure | P0 |
+| GPU-010 | Low-memory/device loss | Normal Laptiva remains usable after failure | P0 |
 
 Record device, OS, browser, model revision, runtime revision, cold-load time, warm-load time, first-token latency, and outcome.
 
@@ -732,7 +732,7 @@ Copy a row for every real test run.
 ### Environment
 
 - Commit:
-- Pulse version:
+- Laptiva version:
 - Device:
 - OS:
 - Browser:
@@ -767,4 +767,4 @@ Copy a row for every real test run.
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0.0 | 2026-08-30 | Initial Pulse Labs test specification mapped to implementation requirements. |
+| 1.0.0 | 2026-08-30 | Initial Laptiva Labs test specification mapped to implementation requirements. |
