@@ -1,7 +1,7 @@
 'use client';
 
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, UIEvent } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, UIEvent } from 'react';
 import {
   COACH_PERSONALITIES,
   createCoachMemory,
@@ -391,44 +391,6 @@ function Switch({
   );
 }
 
-function MetricInput({
-  label,
-  helper,
-  value,
-  unit,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  helper: string;
-  value: number;
-  unit: string;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="metric-input">
-      <span className="metric-copy"><strong>{label}</strong><small>{helper}</small></span>
-      <span className="metric-control">
-        <input
-          type="number"
-          inputMode="numeric"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(event) => {
-            const next = Number(event.target.value);
-            onChange(Number.isFinite(next) ? normalizeTimerMetric(next, min, max) : min);
-          }}
-        />
-        <span>{unit}</span>
-      </span>
-    </label>
-  );
-}
-
 const DURATION_WHEEL_ITEM_HEIGHT = 78;
 const DURATION_WHEEL_MOUSE_DRAG_MULTIPLIER = 1.45;
 const DURATION_WHEEL_MOUSE_MOMENTUM_MS = 180;
@@ -500,6 +462,21 @@ function DurationWheelColumn({
     });
   };
 
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextValue: number | null = null;
+    if (event.key === 'ArrowUp') nextValue = Math.max(min, value - 1);
+    if (event.key === 'ArrowDown') nextValue = Math.min(max, value + 1);
+    if (event.key === 'Home') nextValue = min;
+    if (event.key === 'End') nextValue = max;
+    if (nextValue === null) return;
+
+    event.preventDefault();
+    selectValue(nextValue);
+    window.requestAnimationFrame(() => {
+      listRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
+    });
+  };
+
   const finishMouseDrag = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
     const drag = dragRef.current;
     const list = listRef.current;
@@ -563,6 +540,7 @@ function DurationWheelColumn({
         aria-label={label}
         aria-activedescendant={`${optionIdPrefix}-${value}`}
         onScroll={handleScroll}
+        onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishMouseDrag}
@@ -689,6 +667,96 @@ function DurationInput({
                 onChange={(nextSeconds) => updatePickerValue(minutes, nextSeconds)}
               />
               <span className="duration-wheel-unit">{secondsUnit}</span>
+            </div>
+          )}
+        </div>
+      </dialog>
+    </>
+  );
+}
+
+function CountInput({
+  label,
+  helper,
+  value,
+  min,
+  max,
+  unit,
+  onChange,
+}: {
+  label: string;
+  helper: string;
+  value: number;
+  min: number;
+  max: number;
+  unit: string;
+  onChange: (value: number) => void;
+}) {
+  const { locale } = useLocale();
+  const commonCopy = getMessages(locale).common;
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const titleId = useId();
+  const helperId = useId();
+  const normalizedValue = normalizeTimerMetric(value, min, max);
+  const [pickerValue, setPickerValue] = useState(normalizedValue);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const formattedValue = String(normalizedValue).padStart(2, '0');
+
+  const openPicker = () => {
+    setPickerValue(normalizedValue);
+    if (!dialogRef.current?.open) dialogRef.current?.showModal();
+    setPickerOpen(true);
+  };
+
+  const cancelPicker = () => {
+    setPickerValue(normalizedValue);
+    dialogRef.current?.close();
+    setPickerOpen(false);
+  };
+
+  const applyPicker = () => {
+    onChange(pickerValue);
+    dialogRef.current?.close();
+    setPickerOpen(false);
+  };
+
+  return (
+    <>
+      <button type="button" className="duration-input" onClick={openPicker} aria-label={`${commonCopy.edit} ${label}`}>
+        <span className="metric-copy"><strong>{label}</strong><small>{helper}</small></span>
+        <span className="duration-value">
+          <output aria-live="polite">{formattedValue} {unit}</output>
+          <small>{commonCopy.edit}</small>
+        </span>
+      </button>
+      <dialog
+        className="duration-picker-dialog"
+        ref={dialogRef}
+        aria-labelledby={titleId}
+        aria-describedby={helperId}
+        onCancel={(event) => {
+          event.preventDefault();
+          cancelPicker();
+        }}
+      >
+        <div className="duration-picker-content">
+          <header>
+            <button type="button" onClick={cancelPicker}>{commonCopy.cancel}</button>
+            <strong id={titleId}>{label}</strong>
+            <button type="button" className="accent" onClick={applyPicker}>{commonCopy.done}</button>
+          </header>
+          <p id={helperId}>{helper}</p>
+          <output className="duration-picker-total" aria-live="polite">{String(pickerValue).padStart(2, '0')} {unit}</output>
+          {pickerOpen && (
+            <div className="duration-wheel-pickers count">
+              <DurationWheelColumn
+                label={label}
+                value={pickerValue}
+                min={min}
+                max={max}
+                onChange={setPickerValue}
+              />
+              <span className="duration-wheel-unit">{unit}</span>
             </div>
           )}
         </div>
@@ -2169,8 +2237,8 @@ export default function Home() {
 
           <div className="editor-section-title"><span>{copy.editor.structure}</span><small>{copy.editor.repeats}</small></div>
           <div className="metric-list">
-            <MetricInput label={copy.editor.rounds} helper={copy.editor.roundsHelper} value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraftMetric('rounds', value)} />
-            <MetricInput label={copy.editor.cycles} helper={copy.editor.cyclesHelper(draft.rounds)} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraftMetric('cycles', value)} />
+            <CountInput label={copy.editor.rounds} helper={copy.editor.roundsHelper} value={draft.rounds} unit="×" min={1} max={99} onChange={(value) => updateDraftMetric('rounds', value)} />
+            <CountInput label={copy.editor.cycles} helper={copy.editor.cyclesHelper(draft.rounds)} value={draft.cycles} unit="×" min={1} max={20} onChange={(value) => updateDraftMetric('cycles', value)} />
             <DurationInput label={copy.editor.cycleRest} helper={copy.editor.cycleRestHelper} value={draft.cycleRest} min={0} max={MAX_WHEEL_DURATION_SECONDS} minutesUnit={copy.editor.minutesUnit} secondsUnit={copy.editor.secondsUnit} onChange={(value) => updateDraftMetric('cycleRest', value)} />
           </div>
 
@@ -2658,24 +2726,24 @@ export default function Home() {
             <div className="runner-dialog-section">
               <span className="runner-dialog-section-title">{copy.editor.structure}</span>
               <div className="metric-list">
-              <MetricInput
-                label={copy.runner.adjustSessionRounds}
-                helper={copy.editor.roundsHelper}
-                value={sessionAdjustment.rounds}
-                unit="×"
-                min={1}
-                max={99}
-                onChange={(rounds) => setSessionAdjustment((current) => ({ ...current, rounds }))}
-              />
-              <MetricInput
-                label={copy.runner.adjustSessionCycles}
-                helper={copy.editor.cyclesHelper(sessionAdjustment.rounds)}
-                value={sessionAdjustment.cycles}
-                unit="×"
-                min={1}
-                max={20}
-                onChange={(cycles) => setSessionAdjustment((current) => ({ ...current, cycles }))}
-              />
+                <CountInput
+                  label={copy.runner.adjustSessionRounds}
+                  helper={copy.editor.roundsHelper}
+                  value={sessionAdjustment.rounds}
+                  unit="×"
+                  min={1}
+                  max={99}
+                  onChange={(rounds) => setSessionAdjustment((current) => ({ ...current, rounds }))}
+                />
+                <CountInput
+                  label={copy.runner.adjustSessionCycles}
+                  helper={copy.editor.cyclesHelper(sessionAdjustment.rounds)}
+                  value={sessionAdjustment.cycles}
+                  unit="×"
+                  min={1}
+                  max={20}
+                  onChange={(cycles) => setSessionAdjustment((current) => ({ ...current, cycles }))}
+                />
                 <DurationInput
                   label={copy.editor.cycleRest}
                   helper={copy.editor.cycleRestHelper}
