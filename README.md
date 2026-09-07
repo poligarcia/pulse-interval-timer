@@ -32,9 +32,19 @@ Laptiva sound effects use the Web Audio API. On iPhone, Web Audio follows the de
 
 The optional coach uses the system Speech Synthesis voices installed on the device. Focused, Energetic, Tough and Calm personalities vary their wording and delivery while keeping one concrete system voice for the full workout. The coach announces each phase and counts down 3–2–1 at the end of Prepare, Work and Rest. A separate **Coaching phrases** setting controls whether it also reads the more relaxed, context-aware Work cues and displayed Rest and Cooldown messages.
 
-Automatic voice selection curates English system voices, avoids known novelty/effect voices, and applies a Female, Male or Surprise me preference where a known matching voice is available. A manually selected system voice always wins. Web Speech does not expose voice gender or quality metadata, so unknown voices remain available under **Other system voices** and device/browser voice availability can vary. External-music ducking remains unavailable because iOS web apps cannot control another app's volume.
+Automatic voice selection curates system voices from the active language family, avoids known novelty/effect voices, and applies a Female, Male or Surprise me preference where a known matching voice is available. A manually selected compatible system voice always wins. Web Speech does not expose voice gender or quality metadata, so unknown voices remain available under **Other system voices** and device/browser voice availability can vary. External-music ducking remains unavailable because iOS web apps cannot control another app's volume.
 
-Laptiva bundles 120 curated motivational messages and 40 workout-specific cooldown reflections, so they work offline without sending workout activity to a third-party service. The motivational library is curated from the pinned, Apache-2.0-licensed Mentria Motivational Quotes dataset; source and license details ship in `public/third-party-notices.txt`.
+Laptiva bundles motivational and cooldown-message libraries for every supported language; message selection happens locally and works offline. The English motivational library is curated from the pinned, Apache-2.0-licensed Mentria Motivational Quotes dataset. English cooldown reflections are original Laptiva copy attributed to Laptiva Coach. Spanish and Portuguese messages are original, unattributed Laptiva copy. Source and license details for the English motivational collection ship in `public/third-party-notices.txt`.
+
+When configured, optional Firebase/Google Analytics usage measurement loads only after consent and can send workout events with limited properties. Users can change their choice in Settings → Privacy; rejecting analytics does not affect workouts or local history.
+
+## Languages
+
+Laptiva supports English (`en`), Spanish for Argentina (`es-AR`, shared as `es`) and Portuguese for Brazil (`pt-BR`, shared as `pt`). A `?lang=` link takes precedence over the saved preference and browser language, so language-specific links are safe to share. Users can still change the language later in Settings.
+
+The core timer, progress, reminders, calendar content, coach and PWA manifests are localized. Laptiva Labs intentionally remains an English-only experiment until it demonstrates enough product value to justify expanding its language scope. Static social-preview metadata defaults to English by design.
+
+See [`docs/I18N.md`](docs/I18N.md) for architecture, copy conventions, QA coverage and the workflow for adding a language.
 
 ## Development
 
