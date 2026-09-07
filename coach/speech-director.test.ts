@@ -4,6 +4,7 @@ import { CoachSpeechDirector } from './speech-director.ts';
 import { createSpeechController } from './speech-controller.ts';
 import type { SpeechVoiceLike } from './speech-controller.ts';
 import { parseSpeechScript } from './speech-script.ts';
+import { workoutDeliveryExamples } from './workout-delivery-examples.ts';
 
 class Clock {
   now = 0;
@@ -131,4 +132,21 @@ test('strict voice resolution checks again before retry and never falls back to 
   const f = setup(); const handle = f.say('One'); f.clock.tick(100);
   f.synthesis.voices = [{ voiceURI: 'replacement', lang: 'en-US' }]; f.clock.tick(40);
   assert.equal((await handle.done).status, 'failed'); assert.equal(f.spoken.length, 1);
+});
+
+test('a real recovery script is canceled during its internal pause and cannot spill into the real countdown', async () => {
+  const f = setup();
+  const recovery = workoutDeliveryExamples('calm', 'en').find((example) => example.label === 'Recovery 1')!.script;
+  const handle = f.director.speak(recovery, { locale: 'en-US', voiceURI: 'local', priority: 400, interrupt: true, mustFinishByMs: 1000 });
+  f.start(); f.end(); // Phase cue, followed by the 400 ms inter-phrase pause.
+  f.clock.tick(400); f.start(); f.end(); // First recovery thought, then its authored 700 ms pause.
+  assert.equal(handle.state, 'pausing');
+  assert.equal(f.spoken.length, 2);
+  f.clock.tick(600);
+  assert.equal((await handle.done).status, 'expired');
+  const countdown = f.say('Three', { priority: 300, interrupt: true, mustFinishByMs: 2000 });
+  f.start(); f.end(); f.clock.tick(2000);
+  assert.equal((await countdown.done).status, 'completed');
+  assert.deepEqual(f.spoken.map((utterance) => utterance.text), ['Recover.', 'Let your shoulders soften.', 'Three']);
+  assert.equal(f.clock.tasks.size, 0);
 });

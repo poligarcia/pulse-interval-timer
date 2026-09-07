@@ -2,6 +2,7 @@ import { SUPPORTED_LOCALES } from '../i18n/locales.ts';
 import type { Locale } from '../i18n/locales.ts';
 import { displayMessagesForLocale } from './display-message-locales.ts';
 import { makeCoachSpeech } from './personalities.ts';
+import { recoveryMessages } from './recovery-scripts.ts';
 import type { CoachPersonalityId } from './types.ts';
 
 export type DisplayMessageKind = 'motivation' | 'aspiration';
@@ -19,28 +20,30 @@ const RECENT_MESSAGE_LIMITS: Record<DisplayMessageKind, number> = {
   aspiration: 12,
 };
 
-function messagesFor(kind: DisplayMessageKind, locale: Locale) {
-  return displayMessagesForLocale(locale)[kind];
+function messagesFor(kind: DisplayMessageKind, locale: Locale, scriptedPersonality?: CoachPersonalityId) {
+  return scriptedPersonality ? recoveryMessages(locale, scriptedPersonality, kind) : displayMessagesForLocale(locale)[kind];
 }
 
-function recentLimit(kind: DisplayMessageKind, locale: Locale) {
-  return Math.min(RECENT_MESSAGE_LIMITS[kind], messagesFor(kind, locale).length - 1);
+function recentLimit(kind: DisplayMessageKind, locale: Locale, scriptedPersonality?: CoachPersonalityId) {
+  return Math.min(RECENT_MESSAGE_LIMITS[kind], messagesFor(kind, locale, scriptedPersonality).length - 1);
 }
 
-function validRecentIds(kind: DisplayMessageKind, value: unknown, locale: Locale) {
+function validRecentIds(kind: DisplayMessageKind, value: unknown, locale: Locale, scriptedPersonality?: CoachPersonalityId) {
   if (!Array.isArray(value)) return [];
-  const knownIds = new Set(messagesFor(kind, locale).map((message) => message.id));
+  const limit = recentLimit(kind, locale, scriptedPersonality);
+  if (limit === 0) return [];
+  const knownIds = new Set(messagesFor(kind, locale, scriptedPersonality).map((message) => message.id));
   return value
     .filter((id): id is string => typeof id === 'string' && knownIds.has(id))
-    .slice(-recentLimit(kind, locale));
+    .slice(-limit);
 }
 
 function validStoredIds(kind: DisplayMessageKind, value: unknown, locale?: Locale) {
-  if (locale) return validRecentIds(kind, value, locale);
   if (!Array.isArray(value)) return [];
-  const knownIds = new Set(SUPPORTED_LOCALES.flatMap((candidate) => (
-    messagesFor(kind, candidate).map((message) => message.id)
-  )));
+  const knownIds = new Set((locale ? [locale] : SUPPORTED_LOCALES).flatMap((candidate) => [
+    ...messagesFor(kind, candidate),
+    ...(['focused', 'energetic', 'tough', 'calm'] as const).flatMap((personality) => recoveryMessages(candidate, personality, kind)),
+  ]).map((message) => message.id));
   return value
     .filter((id): id is string => typeof id === 'string' && knownIds.has(id))
     .slice(-RECENT_MESSAGE_LIMITS[kind]);
@@ -61,9 +64,10 @@ export function selectDisplayMessage(
   memory: DisplayMessageMemory,
   locale: Locale = 'en',
   random: () => number = Math.random,
+  options: { scriptedPersonality?: CoachPersonalityId } = {},
 ) {
-  const messages = messagesFor(kind, locale);
-  const recentIds = validRecentIds(kind, memory[kind], locale);
+  const messages = messagesFor(kind, locale, options.scriptedPersonality);
+  const recentIds = validRecentIds(kind, memory[kind], locale, options.scriptedPersonality);
   const freshMessages = messages.filter((message) => !recentIds.includes(message.id));
   const pool = freshMessages.length > 0 ? freshMessages : messages;
   const sample = random();
@@ -76,7 +80,7 @@ export function selectDisplayMessage(
     message,
     memory: {
       ...memory,
-      [kind]: [...recentIds, message.id].slice(-recentLimit(kind, locale)),
+      [kind]: [...validStoredIds(kind, memory[kind]), message.id].slice(-RECENT_MESSAGE_LIMITS[kind]),
     },
   };
 }

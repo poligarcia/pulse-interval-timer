@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseSpeechScript, compileSpeechScript } from '../../coach/speech-script.ts';
 import type { SpeechScript } from '../../coach/speech-script.ts';
 import type { ScriptHandle } from '../../coach/speech-director.ts';
+import { workoutDeliveryExamples, speechScriptMarkup } from '../../coach/workout-delivery-examples.ts';
+import type { CoachPersonalityId } from '../../coach/types.ts';
+import { matchSupportedLocale } from '../../i18n/locales.ts';
 
 export type SpeechStudioProps = {
   speechEngineEnabled: boolean;
@@ -45,11 +48,13 @@ export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, 
   const [deadline, setDeadline] = useState(20);
   const [status, setStatus] = useState('Ready');
   const [active, setActive] = useState(false);
+  const [examplePersonality, setExamplePersonality] = useState<CoachPersonalityId>('focused');
   const handleRef = useRef<ScriptHandle | null>(null);
   const compatible = voices.filter((voice) => voice.lang.split('-')[0].toLowerCase() === language.toLowerCase());
   const selected = compatible.find((voice) => voice.voiceURI === voiceURI) ?? compatible.find((voice) => voice.localService);
   const parsed = useMemo(() => parseSpeechScript(source, { id: 'labs-preview', rate, pitch }), [source, rate, pitch]);
   const plan = parsed.ok ? compileSpeechScript(parsed.script) : parsed;
+  const workoutExamples = useMemo(() => workoutDeliveryExamples(examplePersonality, matchSupportedLocale(locale) ?? 'en'), [examplePersonality, locale]);
 
   useEffect(() => () => { handleRef.current?.cancel(); }, []);
 
@@ -75,6 +80,18 @@ export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, 
     <p className="labs-fine-print">Saved on this device. The workout voice-coach switch still controls workout speech. Hiding Labs turns this experiment off.</p>
     <fieldset className="speech-script-controls" disabled={!speechEngineEnabled}>
       <legend className="visually-hidden">Speech script preview</legend>
+      <label className="labs-field">Workout example personality<select value={examplePersonality} onChange={(event) => setExamplePersonality(event.target.value as CoachPersonalityId)}>
+        <option value="focused">Focused</option><option value="energetic">Energetic</option><option value="tough">Tough</option><option value="calm">Calm</option>
+      </select></label>
+      <div className="labs-actions">{workoutExamples.map((example) => <button key={example.label} className="labs-secondary-button" onClick={() => {
+        handleRef.current = null;
+        setActive(false);
+        onStopSpeech();
+        setSource(speechScriptMarkup(example.script));
+        setRate(example.script.rate); setPitch(example.script.pitch);
+        setStatus(`Loaded ${example.label}. Estimated speech budget: ${(example.estimatedMs / 1000).toFixed(1)}s; actual delivery varies.`);
+      }}>Load {example.label}</button>)}</div>
+      <p className="labs-fine-print">These are the actual workout scripts for this personality and language. Enable Coaching phrases in Settings to hear recovery text during workouts. Short intervals use simpler delivery or only the phase cue. Loading an example does not change your workout personality.</p>
       <div className="labs-actions">{['Two-part command', 'Status cue', 'Delivery changes', 'Rehearsal countdown'].map((name, index) =>
         <button key={name} className="labs-secondary-button" onClick={() => setSource(presets[index])}>{name}</button>)}</div>
       <label className="labs-field">Script<textarea rows={6} maxLength={8000} value={source} onChange={(event) => setSource(event.target.value)} spellCheck={false} /></label>
@@ -84,7 +101,7 @@ export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, 
         {compatible.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} · {voice.lang}{voice.localService ? ' · offline' : ' · may need internet'}</option>)}
       </select></label>
       <div className="labs-slider-grid">
-        <label className="labs-range"><span>Base rate <output>{rate.toFixed(2)}</output></span><input aria-label="Script base rate" type="range" min="0.8" max="1.3" step="0.01" value={rate} onChange={(event) => setRate(Number(event.target.value))} /></label>
+        <label className="labs-range"><span>Base rate <output>{rate.toFixed(3)}</output></span><input aria-label="Script base rate" type="range" min="0.8" max="1.3" step="0.005" value={rate} onChange={(event) => setRate(Number(event.target.value))} /></label>
         <label className="labs-range"><span>Base pitch <output>{pitch.toFixed(2)}</output></span><input aria-label="Script base pitch" type="range" min="0.8" max="1.2" step="0.01" value={pitch} onChange={(event) => setPitch(Number(event.target.value))} /></label>
         <label className="labs-range"><span>Stop after <output>{deadline}s</output></span><input aria-label="Script stop after seconds" type="range" min="1" max="30" step="1" value={deadline} onChange={(event) => setDeadline(Number(event.target.value))} /></label>
       </div>

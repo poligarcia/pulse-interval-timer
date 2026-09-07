@@ -8,6 +8,8 @@ The experiment uses the browser's native system voices. It does not load the Lab
 
 The script editor includes two-part command, status, delivery-change, and rehearsal-countdown presets in English, Argentine Spanish, and Brazilian Portuguese. Choose a system voice, base rate/pitch, and cancellation cutoff. Playback uses the app's master volume. Stop, restart, hiding Labs, and leaving the page cancel the complete sequence.
 
+The **Workout example personality** selector and **Load Final round / Cycle rest / Recovery 1 / Recovery 2 / Cooldown** buttons load the actual authored workout scripts for that personality and the app's language. Press **Play script** to listen. Loading an example also loads its base delivery settings but does not change the workout personality in Settings. These examples are generated from the same catalog and budget selector used during workouts.
+
 Edited scripts and rehearsal countdowns are preview-only. They are not stored as workout content. Existing generated candidate phrases remain separate from workout coaching.
 
 Supported commands:
@@ -26,7 +28,11 @@ Punctuation never creates an implicit pause. Unknown or malformed commands disab
 
 ## Workout behavior
 
-When enabled, all workout coach requests pass through `CoachSpeechDirector`. Flat `CoachSpeech` values are converted to a single step. Final-round commands have explicitly authored two-part versions with a 450 ms pause and a delivery change; phases shorter than seven seconds keep the flat command. Existing phase/recovery follow-ups become one script with a 400 ms pause. Other copy remains flat.
+When enabled, all workout coach requests pass through `CoachSpeechDirector`. Flat `CoachSpeech` values are converted to a single step. Final-round commands have explicitly authored two-part versions with a 450 ms pause and a delivery change. Cycle-rest and the two-part energetic/calm cooldown cues also have authored pauses and a softer closing segment. Short cues and genuine countdown numbers remain single utterances.
+
+Rest and cycle-rest messages rotate through two original recovery texts per personality and language; cooldown uses one reflection per personality and language (36 texts in total). These phrases use explicit 400–700 ms internal pauses, scoped rate/pitch changes, and subtle volume reductions. The visible message is the same text that is spoken, without markup. Switching the engine off restores the existing quote/reflection collection. The Voice coach and Coaching phrases switches still control speech. Contextual work interventions and completion messages remain flat.
+
+Phase/recovery follow-ups form one script with a 400 ms inter-phrase pause. Before starting, the selector checks the remaining safe speaking window and tries authored delivery, plain delivery of the same words, the phase cue alone, then silence if even that cue is unlikely to fit. Authored recovery requires a personality-specific minimum budget as well as the speech estimate. This replaces the earlier fixed seven-second threshold. See [Coach delivery authoring](COACH_DELIVERY.md) for the catalog audit and expansion procedure.
 
 The director owns the queue, priority, asynchronous pause timers, deadlines, and one final outcome per handle. `SpeechController` owns native events, voice loading, cancel/replacement behavior, pre-start retries, and an opt-in 30-second completion watchdog. Speech never adjusts the workout timeline.
 

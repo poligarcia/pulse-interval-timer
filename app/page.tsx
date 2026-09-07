@@ -41,7 +41,7 @@ import { CoachSpeechDirector } from '@/coach/speech-director';
 import type { ScriptOptions } from '@/coach/speech-director';
 import { flatSpeechScript } from '@/coach/speech-script';
 import type { SpeechScript } from '@/coach/speech-script';
-import { phaseSpeechScript, workoutSpeechSchedule } from '@/coach/workout-speech';
+import { phaseAnnouncementScript, workoutSpeechCutoff, workoutSpeechSchedule } from '@/coach/workout-speech';
 import {
   calculateProgressMilestones,
   calculateProgressStreaks,
@@ -1373,17 +1373,22 @@ export default function Home() {
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
     const speech = selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale);
     const experimental = labsUnlocked && speechEngineEnabled;
-    if (experimental) cancelCoachSpeech();
-    const script = experimental && phase.duration >= 7 ? phaseSpeechScript(speech, personality, locale) : flatSpeechScript(speech);
-    if (followUp) script.segments = [...script.segments, { kind: 'pause', ms: RECOVERY_SPEECH_PAUSE_MS }, {
-      kind: 'text', text: followUp.text,
-      style: { rateDelta: followUp.rate - speech.rate, pitchDelta: followUp.pitch - speech.pitch },
-    }];
+    let script: SpeechScript | undefined;
+    if (experimental) {
+      cancelCoachSpeech();
+      const now = performance.now();
+      const snapshot = workoutTimelineRef.current?.snapshot(now);
+      const remainingMs = phase.duration * 1000 - (snapshot?.phaseIndex === index ? snapshot.phaseElapsedMs : 0);
+      const availableMs = workoutSpeechCutoff(now + remainingMs, ['prepare', 'work', 'rest'].includes(phase.kind)) - now;
+      const selected = phaseAnnouncementScript(speech, personality, locale, availableMs, followUp);
+      if (!selected) return null;
+      script = selected;
+    }
     return speakCoach(
       speech,
       {
         interrupt: true,
-        script: experimental ? script : undefined,
+        script,
         onEnd: !experimental && followUp ? () => scheduleCoachSpeechAfterPause(followUp) : undefined,
       },
     );
@@ -1547,7 +1552,9 @@ export default function Home() {
       return null;
     }
 
-    const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current, locale);
+    const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current, locale, Math.random, {
+      scriptedPersonality: labsUnlocked && speechEngineEnabled ? resolveWorkoutCoach().personality : undefined,
+    });
     displayMessageMemoryRef.current = selection.memory;
     try {
       window.localStorage.setItem(DISPLAY_MESSAGE_MEMORY_STORAGE, JSON.stringify(selection.memory));
@@ -1557,7 +1564,7 @@ export default function Home() {
     const runnerSelection = { phaseIndex: index, kind, message: selection.message };
     setRunnerMessageSelection(runnerSelection);
     return runnerSelection;
-  }, [locale]);
+  }, [labsUnlocked, locale, resolveWorkoutCoach, speechEngineEnabled]);
 
   const trackWorkoutEnd = useCallback((outcome: Outcome) => {
     const total = workoutDuration(activeTimer);
