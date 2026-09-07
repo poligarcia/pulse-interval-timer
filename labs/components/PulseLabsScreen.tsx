@@ -41,7 +41,7 @@ export default function LaptivaLabsScreen({ onBack, onHideLabs }: { onBack: () =
         <PhraseVoiceStudio controller={controller} status={status} />
         <section className="labs-panel labs-privacy" aria-labelledby="labs-privacy-title">
           <h2 id="labs-privacy-title">Local by default</h2>
-          <p>Prompts, generated phrases, ratings, and saved candidates stay in this browser unless you explicitly export a candidate pack. {BRAND_NAME} adds no analytics or telemetry.</p>
+          <p>Prompts, generated phrases, ratings, and saved candidates stay in this browser unless you explicitly export a candidate pack.</p>
           <button className="labs-secondary-button" onClick={onHideLabs}>Hide {BRAND_NAME} Labs</button>
           <p className="labs-fine-print">Hiding removes the Settings entry and resets the seven-tap unlock. It does not delete cached model assets or candidate phrases.</p>
         </section>

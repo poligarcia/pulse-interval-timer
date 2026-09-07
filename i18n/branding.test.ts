@@ -38,9 +38,9 @@ test('install and social metadata use Laptiva without changing the legacy deploy
 
 test('the longer wordmark has explicit narrow-screen safeguards', () => {
   const styles = projectFile('app/globals.css');
-  const splashRule = styles.match(/\.splash-brand strong\s*{([^}]*)}/s)?.[1] ?? '';
-  const lockupRule = styles.match(/\.brand-lockup\s*{([^}]*)}/s)?.[1] ?? '';
-  const topbarNameRule = styles.match(/\.topbar h1\s*{([^}]*)}/s)?.[1] ?? '';
+  const splashRule = styles.match(/\.splash-brand strong\s*{([^}]*)}/)?.[1] ?? '';
+  const lockupRule = styles.match(/\.brand-lockup\s*{([^}]*)}/)?.[1] ?? '';
+  const topbarNameRule = styles.match(/\.topbar h1\s*{([^}]*)}/)?.[1] ?? '';
 
   assert.match(splashRule, /font-size:\s*clamp\(/);
   assert.match(splashRule, /white-space:\s*nowrap/);

@@ -2,6 +2,11 @@
 
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, UIEvent } from 'react';
+import { ConsentCard } from '@/analytics/ConsentCard';
+import { useAnalytics } from '@/analytics/useAnalytics';
+import { completionBucket, durationBucket } from '@/analytics/events';
+import type { Outcome } from '@/analytics/events';
+import { WorkoutAnalytics } from '@/analytics/workout';
 import {
   COACH_PERSONALITIES,
   createCoachMemory,
@@ -786,7 +791,15 @@ export default function Home() {
   const { locale, setLocale } = useLocale();
   const copy = getMessages(locale);
   const localeName = LOCALE_OPTIONS.find((option) => option.locale === locale)?.name ?? locale;
-  const [screen, setScreen] = useState<ScreenName>('home');
+  const [screen, setCurrentScreen] = useState<ScreenName>('home');
+  const analytics = useAnalytics(locale, APP_VERSION);
+  const { track, navigate } = analytics;
+  const setScreen = useCallback((next: ScreenName) => {
+    navigate(next);
+    setCurrentScreen(next);
+  }, [navigate]);
+  const workoutAnalytics = useMemo(() => new WorkoutAnalytics(track), [track]);
+  const suppressResumeAnalyticsRef = useRef(false);
   const [returnScreen, setReturnScreen] = useState<ReturnScreen>('home');
   const [timers, setTimers] = useState<TimerConfig[]>(DEFAULT_TIMERS);
   const [recentTimerIds, setRecentTimerIds] = useState<string[]>([]);
@@ -1483,6 +1496,18 @@ export default function Home() {
     return runnerSelection;
   }, [locale]);
 
+  const trackWorkoutEnd = useCallback((outcome: Outcome) => {
+    const total = workoutDuration(activeTimer);
+    const elapsed = workoutTimelineRef.current?.snapshot(performance.now()).elapsedMs ?? 0;
+    workoutAnalytics.end({
+      outcome,
+      completion_bucket: completionBucket(outcome === 'completed' ? 1 : elapsed / (total * 1000)),
+      phase_kind: sequenceRef.current[phaseIndexRef.current]?.kind ?? 'work',
+      planned_duration_bucket: durationBucket(total),
+      coach_enabled: settings.voiceEnabled,
+    });
+  }, [activeTimer, settings.voiceEnabled, workoutAnalytics]);
+
   const recordCompletedWorkout = useCallback(() => {
     if (recordedWorkoutSessionIdRef.current) return;
     const completedAt = new Date();
@@ -1493,6 +1518,7 @@ export default function Home() {
     const startedAt = Number.isFinite(storedStart.getTime()) ? storedStart : fallbackStart;
     const session = createWorkoutSession(activeTimer, startedAt, completedAt);
     recordedWorkoutSessionIdRef.current = session.id;
+    trackWorkoutEnd('completed');
     const previouslyUnlocked = new Set(
       calculateProgressMilestones(workoutSessions, completedAt, settings.weeklyActiveDayGoal)
         .filter(({ unlocked }) => unlocked)
@@ -1503,7 +1529,7 @@ export default function Home() {
       .filter(({ id, unlocked }) => unlocked && !previouslyUnlocked.has(id));
     setWorkoutSessions(nextSessions);
     setNewMilestones(newlyUnlocked);
-  }, [activeTimer, settings.weeklyActiveDayGoal, workoutSessions]);
+  }, [activeTimer, settings.weeklyActiveDayGoal, workoutSessions, trackWorkoutEnd]);
 
   const finishWorkout = useCallback(() => {
     if (transitionLockRef.current || finishIntentRef.current) return;
@@ -1656,6 +1682,12 @@ export default function Home() {
       cooldown: normalizeTimerMetric(sessionAdjustment.cooldown, 0, 3600),
     };
     if (adjustedTimer.nameIsCustom === false) adjustedTimer.name = generatedTimerName(adjustedTimer);
+    const structureChanged = adjustedTimer.rounds !== activeTimer.rounds || adjustedTimer.cycles !== activeTimer.cycles;
+    const durationChanged = (['prepare', 'work', 'rest', 'cycleRest', 'cooldown'] as const)
+      .some((key) => adjustedTimer[key] !== activeTimer[key]);
+    if (structureChanged || durationChanged) track('workout_adjusted', {
+      changed_field: structureChanged && durationChanged ? 'both' : structureChanged ? 'structure' : 'duration',
+    });
     const adjustedSequence = buildSequence(adjustedTimer);
     suppressWorkoutCuesRef.current = false;
     stopWorkoutAudio();
@@ -1718,6 +1750,10 @@ export default function Home() {
       nameIsCustom,
     };
 
+    track('timer_saved', {
+      operation: timers.some((timer) => timer.id === safeTimer.id) ? 'update' : 'create',
+      planned_duration_bucket: durationBucket(workoutDuration(safeTimer)),
+    });
     setTimers((current) => {
       const exists = current.some((timer) => timer.id === safeTimer.id);
       return exists
@@ -1746,6 +1782,9 @@ export default function Home() {
   };
 
   const beginWorkout = (timer: TimerConfig) => {
+    suppressResumeAnalyticsRef.current = false;
+    track('timer_selected', { entry_point: screen === 'library' ? 'library' : 'home',
+      timer_source: DEFAULT_TIMERS.some((preset) => preset.id === timer.id) ? 'preset' : 'custom' });
     const normalizedTimer = normalizeTimerValues(timer);
     const firstSequence = buildSequence(normalizedTimer);
     suppressWorkoutCuesRef.current = false;
@@ -1823,6 +1862,7 @@ export default function Home() {
         finishWorkout();
         return;
       }
+      track('workout_paused', { phase_kind: sequenceRef.current[phaseIndexRef.current]?.kind ?? 'work' });
       setRunning(false);
       cancelCoachSpeech();
       releaseWakeLock();
@@ -1898,6 +1938,16 @@ export default function Home() {
         runningRef.current = true;
         setRunning(true);
         setHasWorkoutStarted(true);
+        if (isResuming) {
+          if (!suppressResumeAnalyticsRef.current) track('workout_resumed', { phase_kind: resumedPhase?.kind ?? 'work' });
+        } else {
+          workoutAnalytics.start({
+            timer_source: DEFAULT_TIMERS.some((preset) => preset.id === activeTimer.id) ? 'preset' : 'custom',
+            planned_duration_bucket: durationBucket(workoutDuration(activeTimer)),
+            coach_enabled: settings.voiceEnabled,
+          });
+        }
+        suppressResumeAnalyticsRef.current = false;
         if (resumedPhase && !isResuming && audioContext && !scheduler?.hasScheduled(`current-phase-${pausedSnapshot.phaseIndex}`)) {
           void playCue(resumedPhase.kind);
         }
@@ -1912,6 +1962,8 @@ export default function Home() {
   };
 
   const resetWorkout = () => {
+    suppressResumeAnalyticsRef.current = false;
+    trackWorkoutEnd('reset');
     suppressWorkoutCuesRef.current = false;
     invalidatePendingWorkoutStart();
     invalidateAudioRecovery();
@@ -1942,6 +1994,7 @@ export default function Home() {
   };
 
   const exitWorkout = () => {
+    trackWorkoutEnd('discarded');
     suppressWorkoutCuesRef.current = false;
     invalidatePendingWorkoutStart();
     invalidateAudioRecovery();
@@ -1994,7 +2047,10 @@ export default function Home() {
     resumeAfterFinishDialogRef.current = false;
     finishIntentRef.current = false;
     finishSessionDialogRef.current?.close();
-    if (shouldResume) void toggleWorkout();
+    if (shouldResume) {
+      suppressResumeAnalyticsRef.current = true;
+      void toggleWorkout();
+    }
   };
 
   const saveStoppedWorkout = () => {
@@ -2020,6 +2076,7 @@ export default function Home() {
       stoppedAt,
     );
 
+    trackWorkoutEnd('partial_saved');
     transitionLockRef.current = true;
     suppressWorkoutCuesRef.current = false;
     invalidatePendingWorkoutStart();
@@ -2130,7 +2187,9 @@ export default function Home() {
       setCalendarStatus(copy.status.calendarOpened);
       link.click();
       link.remove();
+      track('calendar_exported', { result: 'initiated' });
     } catch {
+      track('calendar_exported', { result: 'failed' });
       setCalendarStatus(copy.status.calendarError);
     }
   };
@@ -2162,6 +2221,7 @@ export default function Home() {
 
   const restoreWorkoutAudio = () => {
     if (audioRestorePromiseRef.current) return;
+    track('audio_recovery_attempted', {});
     audioEngineRef.current?.stopRecovery();
     audioEnsurePromiseRef.current = null;
     audioRecoveryPromiseRef.current = null;
@@ -2264,6 +2324,7 @@ export default function Home() {
         </header>
 
         <section className="settings-content">
+          <ConsentCard locale={locale} consent={analytics.consent} choose={analytics.choose} storageError={analytics.storageError} settings />
           <div className="settings-group">
             <p className="settings-kicker">{copy.settings.languageKicker}</p>
             <div className="language-setting-row">
@@ -2277,7 +2338,10 @@ export default function Home() {
                     aria-pressed={locale === option.locale}
                     lang={option.locale}
                     key={option.locale}
-                    onClick={() => setLocale(option.locale)}
+                    onClick={() => {
+                      if (option.locale !== locale) track('setting_changed', { setting_name: 'locale', setting_value: option.locale });
+                      setLocale(option.locale);
+                    }}
                   >{option.code}</button>
                 ))}
               </div>
@@ -2340,7 +2404,10 @@ export default function Home() {
             <p className="settings-kicker">{copy.audioSettings.kicker}</p>
             <div className="setting-row">
               <div><strong>{copy.audioSettings.soundEffects}</strong><small>{copy.audioSettings.soundEffectsHelper}</small></div>
-              <Switch label={copy.audioSettings.soundEffects} checked={settings.soundEnabled} onChange={(soundEnabled) => setSettings((current) => ({ ...current, soundEnabled }))} />
+              <Switch label={copy.audioSettings.soundEffects} checked={settings.soundEnabled} onChange={(soundEnabled) => {
+                track('setting_changed', { setting_name: 'sound', setting_value: soundEnabled ? 'enabled' : 'disabled' });
+                setSettings((current) => ({ ...current, soundEnabled }));
+              }} />
             </div>
             <button className="setting-row setting-action" onClick={() => { void playCue('work'); }}>
               <div><strong>{copy.audioSettings.soundScheme}</strong><small>{copy.audioSettings.soundSchemeHelper}</small></div>
@@ -2363,7 +2430,10 @@ export default function Home() {
             </label>
             <div className="setting-row">
               <div><strong>{copy.audioSettings.tickingSound}</strong><small>{copy.audioSettings.tickingHelper}</small></div>
-              <Switch label={copy.audioSettings.tickingSound} checked={settings.ticking} onChange={(ticking) => setSettings((current) => ({ ...current, ticking }))} />
+              <Switch label={copy.audioSettings.tickingSound} checked={settings.ticking} onChange={(ticking) => {
+                track('setting_changed', { setting_name: 'ticking', setting_value: ticking ? 'enabled' : 'disabled' });
+                setSettings((current) => ({ ...current, ticking }));
+              }} />
             </div>
             <p className="setting-note">{copy.audioSettings.silentModeNote}</p>
           </div>
@@ -2372,7 +2442,10 @@ export default function Home() {
             <p className="settings-kicker">{copy.coachSettings.kicker}</p>
             <div className="setting-row">
               <div><strong>{copy.coachSettings.voiceCoach}</strong><small>{copy.coachSettings.voiceCoachHelper}</small></div>
-              <Switch label={copy.coachSettings.voiceCoachSwitch} checked={settings.voiceEnabled} onChange={(voiceEnabled) => setSettings((current) => ({ ...current, voiceEnabled }))} />
+              <Switch label={copy.coachSettings.voiceCoachSwitch} checked={settings.voiceEnabled} onChange={(voiceEnabled) => {
+                track('setting_changed', { setting_name: 'coach', setting_value: voiceEnabled ? 'enabled' : 'disabled' });
+                setSettings((current) => ({ ...current, voiceEnabled }));
+              }} />
             </div>
             <div className={`setting-row ${!settings.voiceEnabled ? 'unavailable' : ''}`}>
               <div><strong>{copy.coachSettings.coachingPhrases}</strong><small>{copy.coachSettings.coachingPhrasesHelper}</small></div>
@@ -2380,7 +2453,10 @@ export default function Home() {
                 label={copy.coachSettings.coachingPhrasesSwitch}
                 checked={settings.coachPhrasesEnabled}
                 disabled={!settings.voiceEnabled}
-                onChange={(coachPhrasesEnabled) => setSettings((current) => ({ ...current, coachPhrasesEnabled }))}
+                onChange={(coachPhrasesEnabled) => {
+                  track('setting_changed', { setting_name: 'coach_phrases', setting_value: coachPhrasesEnabled ? 'enabled' : 'disabled' });
+                  setSettings((current) => ({ ...current, coachPhrasesEnabled }));
+                }}
               />
             </div>
             <fieldset className={`coach-choice-section ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
@@ -2476,7 +2552,10 @@ export default function Home() {
             <p className="settings-kicker">{copy.displaySettings.kicker}</p>
             <div className="setting-row">
               <div><strong>{copy.displaySettings.rotation}</strong><small>{copy.displaySettings.rotationHelper}</small></div>
-              <Switch label={copy.displaySettings.rotationAria} checked={settings.rotation} onChange={(rotation) => setSettings((current) => ({ ...current, rotation }))} />
+              <Switch label={copy.displaySettings.rotationAria} checked={settings.rotation} onChange={(rotation) => {
+                track('setting_changed', { setting_name: 'rotation', setting_value: rotation ? 'enabled' : 'disabled' });
+                setSettings((current) => ({ ...current, rotation }));
+              }} />
             </div>
             <p className="setting-note">{copy.displaySettings.orientationNote}</p>
           </div>
@@ -2801,6 +2880,7 @@ export default function Home() {
           <button className="text-button accent" onClick={() => openEditor(undefined, 'library')}>{copy.common.new}</button>
         </header>
 
+        {analytics.ready && analytics.consent === 'unknown' && <ConsentCard locale={locale} consent={analytics.consent} choose={analytics.choose} storageError={analytics.storageError} />}
         <section className="library-content">
           <div className="library-intro"><div><p className="eyebrow">{copy.library.allPrograms}</p><h1>{copy.library.timerCount(timers.length)}</h1></div><p>{copy.library.description}</p></div>
           <div className="library-list">
@@ -2839,6 +2919,7 @@ export default function Home() {
         <button className="icon-button" aria-label={copy.common.openSettings} onClick={() => openSettings('home')}><AppIcon name="settings" /></button>
       </header>
 
+      {analytics.ready && analytics.consent === 'unknown' && <ConsentCard locale={locale} consent={analytics.consent} choose={analytics.choose} storageError={analytics.storageError} />}
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
           <p className="eyebrow dark">{copy.home.readyEyebrow}</p>

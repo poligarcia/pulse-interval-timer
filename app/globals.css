@@ -996,3 +996,32 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+/* Consent stays in the page flow, never over workout controls. */
+.analytics-consent {
+  margin: 0 20px 20px;
+  padding: 20px;
+  border: 1px solid #41484b;
+  border-radius: 20px;
+  background: var(--ink-raised);
+  color: var(--paper);
+}
+.analytics-consent h2 { margin: 0; font-size: 17px; line-height: 1.4; }
+.analytics-consent p { margin: 9px 0 0; color: #c1c5c2; font-size: 14px; line-height: 1.6; }
+.analytics-consent-actions { display: flex; gap: 10px; margin: 16px 0; }
+.analytics-consent-actions button {
+  flex: 1; min-height: 46px; padding: 10px; border: 1px solid #656d70;
+  border-radius: 12px; background: transparent; color: var(--paper); font: inherit; font-size: 14px; font-weight: 650;
+}
+.analytics-consent-actions button:hover:not(:disabled) { background: #343b3e; }
+.analytics-consent-actions button:disabled { opacity: .5; cursor: default; }
+.analytics-consent :is(button, summary, a):focus-visible { outline: 2px solid var(--lime); outline-offset: 4px; }
+.analytics-consent summary { color: var(--paper); font-size: 13px; cursor: pointer; padding: 7px 0; }
+.analytics-consent a { display: inline-block; color: var(--paper); font-size: 13px; margin-top: 12px; text-decoration: underline; }
+.analytics-privacy-settings { margin: 0; }
+.analytics-consent .settings-kicker { margin: 0 0 12px; }
+.analytics-consent .analytics-consent-status { color: var(--paper); font-weight: 600; }
+@media (max-width: 360px) {
+  .analytics-consent { margin-inline: 14px; padding: 16px; }
+  .analytics-privacy-settings { margin: 0; }
+  .analytics-privacy-settings .analytics-consent-actions { flex-direction: column; }
+}

@@ -12,8 +12,8 @@ endorsement.
 - Vendored directory: `public/mentria/dist/`
 - License source: repository-root `LICENSE`
 - License: MIT
-- Modifications: none. Laptiva copies the complete upstream `dist` directory
-  from this revision without editing its files.
+- Modifications: the embedded `CLEANUP_NOTES.md` developer checklist and its
+  resource-map entry were removed from `worker.mjs`. Runtime code is unchanged.
 
 The runtime is dynamically imported only after explicit model-download
 consent. URLs are resolved relative to `document.baseURI` so the same files

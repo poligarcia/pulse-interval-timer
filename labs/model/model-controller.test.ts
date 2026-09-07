@@ -74,7 +74,7 @@ test('UT-MODEL-010 load failure becomes a recoverable error', async () => {
 
 test('UT-MODEL-011 progress is clamped and normalized', async () => {
   const fake = new DeterministicFakeModel();
-  let release = () => undefined;
+  let release: () => void = () => undefined;
   fake.load = ({ onProgress }) => {
     fake.loadCalls += 1;
     onProgress({ phase: 'download', loaded: 200, total: 100 });

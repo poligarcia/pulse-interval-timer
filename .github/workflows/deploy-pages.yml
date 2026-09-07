@@ -28,6 +28,9 @@ jobs:
       - name: Install
         run: npm ci
       - name: Build static site
+        env:
+          NEXT_PUBLIC_ANALYTICS_ENV: production
+          NEXT_PUBLIC_FIREBASE_CONFIG: ${{ vars.FIREBASE_WEB_CONFIG }}
         run: npm run build:github
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
