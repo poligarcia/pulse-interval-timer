@@ -18,6 +18,7 @@ export const MAX_PHRASE_CANDIDATES = 100;
 export type LabsSettings = {
   version: 1;
   unlocked: boolean;
+  speechEngineEnabled?: boolean;
 };
 
 export type CandidatePack = {
@@ -44,7 +45,7 @@ export function parseLabsSettings(value: unknown): LabsSettings {
   if (!isRecord(value) || value.version !== LABS_STORAGE_VERSION || typeof value.unlocked !== 'boolean') {
     return DEFAULT_LABS_SETTINGS;
   }
-  return { version: 1, unlocked: value.unlocked };
+  return { version: 1, unlocked: value.unlocked, ...(value.unlocked && value.speechEngineEnabled === true ? { speechEngineEnabled: true } : {}) };
 }
 
 export function readLabsSettings(storage: StorageLike): LabsSettings {

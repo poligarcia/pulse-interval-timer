@@ -13,6 +13,7 @@ import {
   parseLabsSettings,
   rateCandidate,
   readLabsSettings,
+  writeLabsSettings,
 } from './storage.ts';
 import type { PhraseCandidate } from './types.ts';
 
@@ -65,6 +66,16 @@ test('UT-STORAGE-004 Hide Labs resets unlock without changing candidate data', (
   storage.values.set(LABS_PHRASES_STORAGE_KEY, 'keep');
   assert.deepEqual(hideLabs(storage), DEFAULT_LABS_SETTINGS);
   assert.equal(storage.getItem(LABS_PHRASES_STORAGE_KEY), 'keep');
+});
+
+test('experimental speech requires Labs unlock, persists opt-in, and resets when hidden', () => {
+  const storage = new MemoryStorage();
+  assert.deepEqual(parseLabsSettings({ version: 1, unlocked: false, speechEngineEnabled: true }), DEFAULT_LABS_SETTINGS);
+  assert.deepEqual(parseLabsSettings({ version: 1, unlocked: true, speechEngineEnabled: 'true' }), { version: 1, unlocked: true });
+  assert.equal(writeLabsSettings(storage, { version: 1, unlocked: true, speechEngineEnabled: true }), true);
+  assert.equal(readLabsSettings(storage).speechEngineEnabled, true);
+  hideLabs(storage);
+  assert.deepEqual(readLabsSettings(storage), DEFAULT_LABS_SETTINGS);
 });
 
 test('UT-STORAGE-005 candidate cap evicts oldest deterministically', () => {

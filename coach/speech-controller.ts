@@ -72,6 +72,9 @@ export type SpeechRequest<Voice extends SpeechVoiceLike> = {
   volume?: number;
   interrupt?: boolean;
   retry?: boolean;
+  strictVoice?: boolean;
+  canStart?: () => boolean;
+  completionTimeoutMs?: number;
   onStart?: (event: Event, context: SpeechAttemptContext<Voice>) => void;
   onEnd?: (event: Event, context: SpeechAttemptContext<Voice>) => void;
   onError?: (failure: SpeechFailure<Voice>) => void;
@@ -431,8 +434,16 @@ export class SpeechController<
   private startJob(job: SpeechJob<Voice, Utterance, TimerHandle>) {
     if (!this.isCurrent(job)) return;
     this.clearJobTimer(job);
+    if (job.request.canStart && !job.request.canStart()) {
+      this.terminateWithFailure(job, 'expired');
+      return;
+    }
     this.refreshVoices(false);
     const voice = this.selectVoiceFor(job.request);
+    if (job.request.strictVoice && (!voice || voice.voiceURI !== job.request.preferredVoiceURI)) {
+      this.terminateWithFailure(job, 'voice-unavailable');
+      return;
+    }
     if (!voice && job.attempt > 0) {
       job.state = 'waiting-for-voice';
       job.voice = null;
@@ -503,6 +514,12 @@ export class SpeechController<
     this.clearJobTimer(job);
     job.started = true;
     job.state = 'speaking';
+    if (Number.isFinite(job.request.completionTimeoutMs) && job.request.completionTimeoutMs! > 0) {
+      job.timer = this.environment.setTimer(() => {
+        job.timer = null;
+        this.handleAttemptFailure(job, token, 'end-timeout');
+      }, job.request.completionTimeoutMs!);
+    }
     job.request.onStart?.(event, this.attemptContext(job));
   }
 

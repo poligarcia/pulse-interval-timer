@@ -73,7 +73,7 @@ function browserSpeechEnvironment(): SpeechPreviewEnvironment | null {
   };
 }
 
-export function PhraseVoiceStudio({ controller, status }: { controller: ModelController; status: MentriaStatus }) {
+export function PhraseVoiceStudio({ controller, status, onBeforePreview }: { controller: ModelController; status: MentriaStatus; onBeforePreview?: () => void }) {
   const [customText, setCustomText] = useState('Stay steady. Finish the round.');
   const [personality, setPersonality] = useState<CoachPersonalityId>('focused');
   const [zone, setZone] = useState<FatigueZone>('fresh');
@@ -123,6 +123,7 @@ export function PhraseVoiceStudio({ controller, status }: { controller: ModelCon
   };
 
   const preview = (text: string) => {
+    onBeforePreview?.();
     const environment = browserSpeechEnvironment();
     if (!environment) return;
     speakPhrasePreview(environment, text, { voiceURI, rate, pitch });

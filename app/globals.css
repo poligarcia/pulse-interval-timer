@@ -859,6 +859,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .library-actions .edit-action { border-right: 0; color: var(--lime); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 
 /* Laptiva Labs */
+.speech-engine-toggle { display: flex; gap: 10px; align-items: center; font-weight: 800; }
+.speech-engine-toggle input { width: 20px; height: 20px; accent-color: var(--lime); }
+.speech-script-controls { display: grid; gap: 16px; min-width: 0; margin: 18px 0 0; padding: 0; border: 0; }
+.speech-script-controls:disabled { opacity: .5; }
+.speech-script-controls code, .speech-script-steps { overflow-wrap: anywhere; }
+.speech-script-steps { padding-left: 24px; font-size: 12px; line-height: 1.7; }
 .version-unlock-button { margin: -8px 0; padding: 8px 0; border: 0; color: inherit; background: transparent; font-size: inherit; }
 .version-unlock-button:hover { color: var(--lime); }
 .version-unlock-status { display: block; min-height: 14px; margin-top: 5px; color: var(--lime); font-size: 9px; font-weight: 800; }

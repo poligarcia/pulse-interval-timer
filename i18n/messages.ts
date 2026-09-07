@@ -421,7 +421,7 @@ const en: AppMessages = {
     orientationNote: 'Orientation locking depends on iOS and works best when Laptiva is opened from the Home Screen.',
   },
   experimentalSettings: {
-    kicker: 'EXPERIMENTAL', labsHelper: 'Local Mentria text experiments and system-voice previews', open: 'Open',
+    kicker: 'EXPERIMENTAL', labsHelper: 'Speech scripts, experimental coaching, and local text generation', open: 'Open',
     labsNote: 'Opening Labs never downloads or initializes a model. Model assets require a separate confirmation.',
   },
   about: {
@@ -599,7 +599,7 @@ const esAR: AppMessages = {
     orientationNote: 'El bloqueo de orientación depende de iOS y funciona mejor cuando abrís Laptiva desde la pantalla de inicio.',
   },
   experimentalSettings: {
-    kicker: 'EXPERIMENTAL', labsHelper: 'Experimentos locales de texto de Mentria y pruebas de voces del sistema', open: 'Abrir',
+    kicker: 'EXPERIMENTAL', labsHelper: 'Guiones de voz, coaching experimental y generación local de texto', open: 'Abrir',
     labsNote: 'Abrir Labs nunca descarga ni inicializa un modelo. Los archivos del modelo requieren una confirmación aparte.',
   },
   about: {
@@ -777,7 +777,7 @@ const ptBR: AppMessages = {
     orientationNote: 'O bloqueio de orientação depende do iOS e funciona melhor quando a Laptiva é aberta pela Tela de Início.',
   },
   experimentalSettings: {
-    kicker: 'EXPERIMENTAL', labsHelper: 'Experimentos locais de texto da Mentria e testes de vozes do sistema', open: 'Abrir',
+    kicker: 'EXPERIMENTAL', labsHelper: 'Roteiros de voz, orientação experimental e geração local de texto', open: 'Abrir',
     labsNote: 'Abrir o Labs nunca baixa nem inicializa um modelo. Os arquivos do modelo exigem uma confirmação separada.',
   },
   about: {

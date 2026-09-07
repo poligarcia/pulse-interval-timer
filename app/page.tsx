@@ -37,6 +37,11 @@ import type {
 } from '@/coach';
 import { createSpeechController } from '@/coach/speech-controller';
 import type { SpeechController } from '@/coach/speech-controller';
+import { CoachSpeechDirector } from '@/coach/speech-director';
+import type { ScriptOptions } from '@/coach/speech-director';
+import { flatSpeechScript } from '@/coach/speech-script';
+import type { SpeechScript } from '@/coach/speech-script';
+import { phaseSpeechScript, workoutSpeechSchedule } from '@/coach/workout-speech';
 import {
   calculateProgressMilestones,
   calculateProgressStreaks,
@@ -825,6 +830,7 @@ export default function Home() {
   const [newMilestones, setNewMilestones] = useState<ProgressMilestone[]>([]);
   const [calendarStatus, setCalendarStatus] = useState('');
   const [labsUnlocked, setLabsUnlocked] = useState(false);
+  const [speechEngineEnabled, setSpeechEngineEnabled] = useState(false);
   const [labsUnlockSequence, setLabsUnlockSequence] = useState<LabsUnlockSequence>(() => createLabsUnlockSequence());
   const [labsUnlockMessage, setLabsUnlockMessage] = useState('');
   const [hydrated, setHydrated] = useState(false);
@@ -840,6 +846,7 @@ export default function Home() {
 
   const audioEngineRef = useRef<AudioEngine | null>(null);
   const speechControllerRef = useRef<BrowserSpeechController | null>(null);
+  const speechDirectorRef = useRef<CoachSpeechDirector<SpeechSynthesisVoice, SpeechSynthesisUtterance> | null>(null);
   const workoutAudioSchedulerRef = useRef<WorkoutAudioScheduler | null>(null);
   const workoutTimelineRef = useRef<WorkoutTimeline | null>(null);
   const activeCoachRef = useRef<ActiveCoach | null>(null);
@@ -861,6 +868,7 @@ export default function Home() {
   const runningRef = useRef(false);
   const sequenceRef = useRef<WorkoutPhase[]>([]);
   const settingsRef = useRef(settings);
+  const previousSpeechVolumeRef = useRef(settings.volume);
   const wakeLockRef = useRef<ScreenWakeLock | null>(null);
   const wakeLockWantedRef = useRef(false);
   const coachSpeechGenerationRef = useRef(0);
@@ -890,6 +898,7 @@ export default function Home() {
     let storedWorkoutSessions: WorkoutSession[] | null = null;
     let storedSettings: Settings | null = null;
     let storedLabsUnlocked: boolean | null = null;
+    let storedSpeechEngineEnabled = false;
     try {
       const savedTimers = window.localStorage.getItem(TIMERS_STORAGE);
       const legacyTimers = window.localStorage.getItem(LEGACY_TIMERS_STORAGE);
@@ -900,6 +909,7 @@ export default function Home() {
       const savedDisplayMessageMemory = window.localStorage.getItem(DISPLAY_MESSAGE_MEMORY_STORAGE);
       const labsSettings = readLabsSettings(window.localStorage);
       storedLabsUnlocked = labsSettings.unlocked;
+      storedSpeechEngineEnabled = labsSettings.unlocked && labsSettings.speechEngineEnabled === true;
       if (savedTimers) {
         const parsed = JSON.parse(savedTimers) as unknown;
         if (Array.isArray(parsed)) {
@@ -936,6 +946,7 @@ export default function Home() {
       if (storedWorkoutSessions) setWorkoutSessions(storedWorkoutSessions);
       if (storedSettings) setSettings(storedSettings);
       if (storedLabsUnlocked !== null) {
+        setSpeechEngineEnabled(storedSpeechEngineEnabled);
         setLabsUnlocked(storedLabsUnlocked);
         const sequenceState = createLabsUnlockSequence(storedLabsUnlocked);
         labsUnlockSequenceRef.current = sequenceState;
@@ -1004,6 +1015,18 @@ export default function Home() {
     return controller;
   }, []);
 
+  const getSpeechDirector = useCallback(() => {
+    const controller = getSpeechController();
+    if (!controller) return null;
+    if (!speechDirectorRef.current) speechDirectorRef.current = new CoachSpeechDirector({
+      controller, now: () => performance.now(),
+      setTimer: (callback, ms) => window.setTimeout(callback, ms),
+      clearTimer: (handle) => window.clearTimeout(handle as number),
+      masterVolume: () => settingsRef.current.volume,
+    });
+    return speechDirectorRef.current;
+  }, [getSpeechController]);
+
   useEffect(() => {
     const controller = getSpeechController();
     if (!controller) return;
@@ -1012,6 +1035,8 @@ export default function Home() {
     });
     return () => {
       unsubscribeVoices();
+      speechDirectorRef.current?.cancelAll('disposed');
+      speechDirectorRef.current = null;
       controller.dispose();
       if (speechControllerRef.current === controller) speechControllerRef.current = null;
     };
@@ -1221,6 +1246,7 @@ export default function Home() {
         ? availableVoices
         : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []));
     const currentCoach = activeCoachRef.current;
+    if (labsUnlocked && speechEngineEnabled && currentCoach?.voiceURI) return currentCoach;
     if (currentCoach
       && (liveVoices.length === 0
         || (currentCoach.voiceURI
@@ -1231,7 +1257,9 @@ export default function Home() {
     const personality = currentCoach?.personality
       ?? resolveCoachPersonality(settings.coachPersonality);
     const coach = resolveActiveCoach({
-      voices: liveVoices,
+      voices: labsUnlocked && speechEngineEnabled && !settings.voiceURI
+        ? liveVoices.filter((voice) => voice.localService === true)
+        : liveVoices,
       personality,
       preference: settings.voicePreference,
       selectedVoiceURI: settings.voiceURI,
@@ -1243,9 +1271,10 @@ export default function Home() {
       setSettings((current) => ({ ...current, lastAutomaticVoiceURI: coach.voiceURI }));
     }
     return coach;
-  }, [availableVoices, getSpeechController, locale, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
+  }, [availableVoices, getSpeechController, labsUnlocked, speechEngineEnabled, locale, settings.coachPersonality, settings.lastAutomaticVoiceURI, settings.voicePreference, settings.voiceURI]);
 
   const cancelCoachSpeech = useCallback(() => {
+    speechDirectorRef.current?.cancelAll();
     coachSpeechGenerationRef.current += 1;
     if (pendingCoachSpeechTimeoutRef.current !== null) {
       window.clearTimeout(pendingCoachSpeechTimeoutRef.current);
@@ -1256,7 +1285,7 @@ export default function Home() {
 
   const speakCoach = useCallback((
     speech: CoachSpeech,
-    options?: { interrupt?: boolean; voiceURI?: string; onEnd?: () => void },
+    options?: { interrupt?: boolean; voiceURI?: string; onEnd?: () => void; script?: SpeechScript; scheduling?: Partial<ScriptOptions> },
   ) => {
     const controller = getSpeechController();
     if (!settings.voiceEnabled || !controller || document.visibilityState !== 'visible') return null;
@@ -1268,6 +1297,24 @@ export default function Home() {
       }
     }
     const voiceURI = options?.voiceURI ?? resolveWorkoutCoach().voiceURI;
+    if (labsUnlocked && speechEngineEnabled) {
+      const script = options?.script ?? flatSpeechScript(speech);
+      const now = performance.now();
+      const timeline = workoutTimelineRef.current;
+      const snapshot = timeline?.snapshot(now);
+      const phase = snapshot ? sequence[snapshot.phaseIndex] : undefined;
+      const countdown = speech.id.startsWith('countdown-');
+      const phaseEnd = snapshot && phase ? now + phase.duration * 1000 - snapshot.phaseElapsedMs : now + 30000;
+      const scheduling = options?.voiceURI !== undefined || snapshot?.finished ? { priority: 500, interrupt: true } : workoutSpeechSchedule(
+        script, countdown ? 'countdown' : options?.interrupt ? 'phase' : 'motivation', now, phaseEnd,
+        phase ? ['prepare', 'work', 'rest'].includes(phase.kind) : false,
+      );
+      return getSpeechDirector()?.speak(script, {
+        ...scheduling, ...options?.scheduling,
+        locale: speechLanguageForLocale(locale), voiceURI,
+        onEnd: options?.onEnd,
+      }) ?? null;
+    }
     return controller.speak({
       text: speech.text,
       locale: speechLanguageForLocale(locale),
@@ -1289,12 +1336,17 @@ export default function Home() {
       },
       onEnd: options?.onEnd,
     });
-  }, [getSpeechController, locale, resolveWorkoutCoach, settings.lastAutomaticVoiceURI, settings.voiceEnabled, settings.voiceURI, settings.volume]);
+  }, [getSpeechController, getSpeechDirector, labsUnlocked, speechEngineEnabled, locale, resolveWorkoutCoach, sequence, settings.lastAutomaticVoiceURI, settings.voiceEnabled, settings.voiceURI, settings.volume]);
 
   useEffect(() => {
     activeCoachRef.current = null;
     cancelCoachSpeech();
-  }, [cancelCoachSpeech, locale]);
+  }, [cancelCoachSpeech, locale, labsUnlocked, speechEngineEnabled]);
+
+  useEffect(() => {
+    if (!settings.voiceEnabled || settings.volume < previousSpeechVolumeRef.current || settings.volume === 0) cancelCoachSpeech();
+    previousSpeechVolumeRef.current = settings.volume;
+  }, [cancelCoachSpeech, settings.voiceEnabled, settings.volume]);
 
   const scheduleCoachSpeechAfterPause = useCallback((speech: CoachSpeech) => {
     const generation = coachSpeechGenerationRef.current;
@@ -1319,14 +1371,23 @@ export default function Home() {
   const announcePhase = useCallback((phase: WorkoutPhase, index: number, followUp?: CoachSpeech) => {
     const personality = activeCoachRef.current?.personality
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
+    const speech = selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale);
+    const experimental = labsUnlocked && speechEngineEnabled;
+    if (experimental) cancelCoachSpeech();
+    const script = experimental && phase.duration >= 7 ? phaseSpeechScript(speech, personality, locale) : flatSpeechScript(speech);
+    if (followUp) script.segments = [...script.segments, { kind: 'pause', ms: RECOVERY_SPEECH_PAUSE_MS }, {
+      kind: 'text', text: followUp.text,
+      style: { rateDelta: followUp.rate - speech.rate, pitchDelta: followUp.pitch - speech.pitch },
+    }];
     return speakCoach(
-      selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale),
+      speech,
       {
         interrupt: true,
-        onEnd: followUp ? () => scheduleCoachSpeechAfterPause(followUp) : undefined,
+        script: experimental ? script : undefined,
+        onEnd: !experimental && followUp ? () => scheduleCoachSpeechAfterPause(followUp) : undefined,
       },
     );
-  }, [contextForPhase, locale, scheduleCoachSpeechAfterPause, settings.coachPersonality, speakCoach]);
+  }, [cancelCoachSpeech, contextForPhase, labsUnlocked, speechEngineEnabled, locale, scheduleCoachSpeechAfterPause, settings.coachPersonality, speakCoach]);
 
   const requestWakeLock = useCallback(async () => {
     const nav = navigator as Navigator & {
@@ -1427,6 +1488,7 @@ export default function Home() {
       stopWorkoutAudio();
       cancelCoachSpeech();
       speechControllerRef.current?.setVisible(false);
+      speechDirectorRef.current?.setVisible(false);
       invalidateAudioRecovery();
     };
     const synchronizeMediaLifecycle = () => {
@@ -1435,6 +1497,7 @@ export default function Home() {
         return;
       }
       getSpeechController()?.setVisible(true);
+      speechDirectorRef.current?.setVisible(true);
       if (runningRef.current) {
         const forceRecreate = mediaWasHiddenRef.current;
         mediaWasHiddenRef.current = false;
@@ -2139,6 +2202,8 @@ export default function Home() {
   };
 
   const hideLabsFromSettings = () => {
+    cancelCoachSpeech();
+    setSpeechEngineEnabled(false);
     hideLabs(window.localStorage);
     setLabsUnlocked(false);
     const sequenceState = createLabsUnlockSequence(false);
@@ -2263,7 +2328,25 @@ export default function Home() {
   if (screen === 'labs') {
     return (
       <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">{copy.status.openingLabs}</p></main>}>
-        <LabsScreen onBack={leaveLabs} onHideLabs={hideLabsFromSettings} />
+        <LabsScreen onBack={leaveLabs} onHideLabs={hideLabsFromSettings}
+          speechEngineEnabled={labsUnlocked && speechEngineEnabled}
+          onSpeechEngineChange={(enabled) => {
+            cancelCoachSpeech();
+            setSpeechEngineEnabled(enabled && labsUnlocked);
+            writeLabsSettings(window.localStorage, { version: 1, unlocked: labsUnlocked, speechEngineEnabled: enabled && labsUnlocked });
+          }}
+          voices={availableVoices} locale={speechLanguageForLocale(locale)}
+          onStopSpeech={cancelCoachSpeech}
+          onPreviewScript={(script, voiceURI, deadlineMs) => {
+            if (!labsUnlocked || !speechEngineEnabled || document.visibilityState !== 'visible') return null;
+            const controller = getSpeechController();
+            controller?.setVisible(true);
+            const director = getSpeechDirector();
+            director?.setVisible(true);
+            return director?.speak(script, { locale: speechLanguageForLocale(locale), voiceURI, priority: 500, interrupt: true,
+              mustFinishByMs: performance.now() + deadlineMs,
+            }) ?? null;
+          }} />
       </Suspense>
     );
   }
