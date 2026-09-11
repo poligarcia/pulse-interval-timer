@@ -27,7 +27,6 @@ import {
 import type {
   ActiveCoach,
   CoachMemory,
-  CoachPersonalityPreference,
   CoachSpeech,
   DisplayMessage,
   DisplayMessageKind,
@@ -61,8 +60,6 @@ import { ProgressScreen } from '@/progress/ProgressScreen';
 import { AppIcon } from '@/components/AppIcon';
 import { BRAND_MARK, BRAND_NAME } from '@/branding';
 import {
-  DEFAULT_REMINDER_DAYS,
-  DEFAULT_REMINDER_TIME,
   REMINDER_DAY_OPTIONS,
   createWorkoutReminderCalendarDataUrl,
   normalizeReminderDays,
@@ -89,77 +86,12 @@ import type { AudioEngine } from '@/workout/audio-engine';
 import { WorkoutTimeline } from '@/workout/timeline';
 import type { WorkoutTimelineEvent, WorkoutTimelineSnapshot } from '@/workout/timeline';
 
+import { APP_VERSION } from '@/backup/backup';
+import { BackupSettings } from '@/backup/BackupSettings';
+import { DEFAULT_SETTINGS, normalizeSettings, normalizeStoredTimer, normalizeTimerMetric, normalizeTimerValues } from '@/backup/model';
+import type { Settings, TimerConfig } from '@/backup/model';
+
 const LabsScreen = lazy(() => import('@/labs/components/PulseLabsScreen'));
-
-type TimerConfig = {
-  id: string;
-  name: string;
-  nameIsCustom?: boolean;
-  prepare: number;
-  work: number;
-  rest: number;
-  rounds: number;
-  cycles: number;
-  cycleRest: number;
-  cooldown: number;
-};
-
-function normalizeTimerMetric(value: number, min: number, max: number) {
-  const finiteValue = Number.isFinite(value) ? value : min;
-  return Math.min(max, Math.max(min, Math.round(finiteValue)));
-}
-
-function normalizeTimerValues(timer: TimerConfig): TimerConfig {
-  return {
-    ...timer,
-    prepare: normalizeTimerMetric(timer.prepare, 0, 600),
-    work: normalizeTimerMetric(timer.work, 1, 3600),
-    rest: normalizeTimerMetric(timer.rest, 0, 3600),
-    rounds: normalizeTimerMetric(timer.rounds, 1, 99),
-    cycles: normalizeTimerMetric(timer.cycles, 1, 20),
-    cycleRest: normalizeTimerMetric(timer.cycleRest, 0, 3600),
-    cooldown: normalizeTimerMetric(timer.cooldown, 0, 3600),
-  };
-}
-
-function normalizeStoredTimer(value: unknown): TimerConfig | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const timer = value as Record<string, unknown>;
-  const metricKeys = ['prepare', 'work', 'rest', 'rounds', 'cycles', 'cycleRest', 'cooldown'] as const;
-  if (typeof timer.id !== 'string' || !timer.id
-    || typeof timer.name !== 'string'
-    || metricKeys.some((key) => typeof timer[key] !== 'number' || !Number.isFinite(timer[key]))) return null;
-
-  return normalizeTimerValues({
-    id: timer.id,
-    name: timer.name,
-    nameIsCustom: typeof timer.nameIsCustom === 'boolean' ? timer.nameIsCustom : undefined,
-    prepare: timer.prepare as number,
-    work: timer.work as number,
-    rest: timer.rest as number,
-    rounds: timer.rounds as number,
-    cycles: timer.cycles as number,
-    cycleRest: timer.cycleRest as number,
-    cooldown: timer.cooldown as number,
-  });
-}
-
-type Settings = {
-  soundEnabled: boolean;
-  volume: number;
-  ticking: boolean;
-  voiceEnabled: boolean;
-  coachPhrasesEnabled: boolean;
-  voiceURI: string;
-  coachPersonality: CoachPersonalityPreference;
-  voicePreference: VoicePreference;
-  lastAutomaticVoiceURI: string;
-  ducking: boolean;
-  rotation: boolean;
-  weeklyActiveDayGoal: number;
-  reminderDays: ReminderDay[];
-  reminderTime: string;
-};
 
 type WorkoutPhase = {
   kind: PhaseKind;
@@ -171,7 +103,6 @@ type WorkoutPhase = {
 type ScreenName = 'home' | 'library' | 'progress' | 'editor' | 'runner' | 'settings' | 'labs';
 type ReturnScreen = 'home' | 'library' | 'progress';
 
-const APP_VERSION = '1.4.0';
 const TIMERS_STORAGE = 'pulse-timers-v2';
 const LEGACY_TIMERS_STORAGE = 'pulse-timers-v1';
 const SETTINGS_STORAGE = 'pulse-settings-v1';
@@ -234,40 +165,6 @@ const LEGACY_DEFAULTS: TimerConfig[] = [
   { id: 'power-20-10', name: 'Power 20 / 10', prepare: 10, work: 20, rest: 10, rounds: 8, cycles: 2, cycleRest: 90, cooldown: 30 },
   { id: 'steady-45-15', name: 'Steady 45 / 15', prepare: 10, work: 45, rest: 15, rounds: 6, cycles: 1, cycleRest: 60, cooldown: 45 },
 ];
-
-const DEFAULT_SETTINGS: Settings = {
-  soundEnabled: true,
-  volume: 0.65,
-  ticking: false,
-  voiceEnabled: false,
-  coachPhrasesEnabled: true,
-  voiceURI: '',
-  coachPersonality: 'focused',
-  voicePreference: 'either',
-  lastAutomaticVoiceURI: '',
-  ducking: false,
-  rotation: true,
-  weeklyActiveDayGoal: 3,
-  reminderDays: DEFAULT_REMINDER_DAYS,
-  reminderTime: DEFAULT_REMINDER_TIME,
-};
-
-function normalizeSettings(value: unknown): Settings {
-  const stored = value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Partial<Settings> & { weeklyWorkoutGoal?: unknown }
-    : {};
-  const { weeklyWorkoutGoal: legacyWeeklyWorkoutGoal, ...currentSettings } = stored;
-  const requestedGoal = Number(currentSettings.weeklyActiveDayGoal ?? legacyWeeklyWorkoutGoal);
-  return {
-    ...DEFAULT_SETTINGS,
-    ...currentSettings,
-    weeklyActiveDayGoal: Number.isFinite(requestedGoal)
-      ? Math.min(7, Math.max(1, Math.round(requestedGoal)))
-      : DEFAULT_SETTINGS.weeklyActiveDayGoal,
-    reminderDays: normalizeReminderDays(stored.reminderDays),
-    reminderTime: normalizeReminderTime(stored.reminderTime),
-  };
-}
 
 function makeEmptyTimer(): TimerConfig {
   const timer: TimerConfig = {
@@ -930,7 +827,7 @@ export default function Home() {
         const parsed = JSON.parse(savedTimers) as unknown;
         if (Array.isArray(parsed)) {
           const normalized = parsed.map(normalizeStoredTimer).filter((timer): timer is TimerConfig => timer !== null);
-          if (normalized.length > 0) storedTimers = normalized;
+          storedTimers = normalized;
         }
       } else if (legacyTimers) {
         const parsed = JSON.parse(legacyTimers) as unknown;
@@ -2572,6 +2469,7 @@ export default function Home() {
         </header>
 
         <section className="settings-content">
+          <BackupSettings locale={locale} state={{ settings, timers, recentTimerIds, workoutSessions, locale }} disabled={!hydrated || running || (hasWorkoutStarted && !finished)} />
           <ConsentCard locale={locale} consent={analytics.consent} choose={analytics.choose} storageError={analytics.storageError} settings />
           <div className="settings-group">
             <p className="settings-kicker">{copy.settings.languageKicker}</p>

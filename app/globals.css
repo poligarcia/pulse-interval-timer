@@ -1042,3 +1042,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .analytics-privacy-settings { margin: 0; }
   .analytics-privacy-settings .analytics-consent-actions { flex-direction: column; }
 }
+
+.backup-review { margin: 16px; padding: 16px; border: 1px solid var(--accent, #ffd05a); border-radius: 16px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.backup-review ul { max-height: 240px; overflow-y: auto; padding-left: 20px; }
+.backup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-top: 20px; }
+.backup-settings button:disabled { opacity: .45; cursor: not-allowed; }
