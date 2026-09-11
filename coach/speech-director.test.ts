@@ -5,6 +5,7 @@ import { createSpeechController } from './speech-controller.ts';
 import type { SpeechVoiceLike } from './speech-controller.ts';
 import { parseSpeechScript } from './speech-script.ts';
 import { workoutDeliveryExamples } from './workout-delivery-examples.ts';
+import { DRILL_LINES, drillBudget, drillScript } from './drill.ts';
 
 class Clock {
   now = 0;
@@ -56,6 +57,34 @@ function setup() {
   const end = () => { synthesis.pending = false; synthesis.speaking = false; spoken.at(-1)!.emit('end'); };
   return { clock, synthesis, spoken, director, say, start, end, setVolume: (value: number) => { volume = value; } };
 }
+
+test('a slow Drill fake is cut off before the real countdown and never resumes its reveal later', async () => {
+  const f = setup();
+  const script = drillScript(DRILL_LINES.fake[0]);
+  const fake = f.director.speak(script, { locale: 'en-US', voiceURI: 'local', priority: 100, mustStartByMs: 400, mustFinishByMs: 6750, admissionBudgetMs: drillBudget(script) });
+  assert.equal(f.director.busy, true);
+  f.start();
+  f.clock.tick(6750); // Native speech stalls; its deadline remains authoritative.
+  assert.equal((await fake.done).status, 'expired');
+  assert.equal(f.director.busy, false);
+  f.clock.tick(250);
+  const countdown = f.say('Three', { priority: 300, mustFinishByMs: 7900 });
+  f.start(); f.end();
+  f.clock.tick(3000);
+  assert.equal((await countdown.done).status, 'completed');
+  assert.deepEqual(f.spoken.map((s) => s.text), ['Five, four, three, two.', 'Three']);
+});
+
+test('a Drill fake delivers its disappointed reveal when the planned budget is available', async () => {
+  const f = setup();
+  const script = drillScript(DRILL_LINES.fake[0]);
+  const handle = f.director.speak(script, { locale: 'en-US', voiceURI: 'local', mustStartByMs: 400, mustFinishByMs: 6750, admissionBudgetMs: drillBudget(script) });
+  f.start(); f.clock.tick(1800); f.end(); f.clock.tick(180);
+  assert.equal(f.spoken[1].text, 'Wrong countdown. Keep working.');
+  assert.ok(f.spoken[1].rate < f.spoken[0].rate);
+  f.start(); f.clock.tick(2000); f.end();
+  assert.equal((await handle.done).status, 'completed');
+});
 
 test('one native utterance at a time, explicit pause from end, same voice and dynamic volume', async () => {
   const f = setup(); const handle = f.say('One[[pause:450]][[volume:*0.7]]Two');

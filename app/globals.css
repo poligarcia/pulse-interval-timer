@@ -660,6 +660,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .personality-grid button.selected, .preference-grid button.selected { border-color: var(--lime); color: var(--ink); background: var(--lime); }
 .personality-grid button.selected small { color: #3b451f; }
 .personality-grid .surprise-personality { grid-column: 1 / -1; min-height: 64px; }
+.personality-grid .surprise-personality.drill-shared-row { grid-column: auto; }
+.personality-grid .drill-personality { border-color: #a49a65; }
+.personality-grid .drill-unlock-hint { outline: 2px dashed #b9a77a; outline-offset: -5px; }
+.drill-reveal { color: #eee9db; background: #20251d; border: 2px solid #b9a77a; border-radius: 16px; padding: 28px; width: min(90vw, 420px); }
+.drill-reveal::backdrop { background: rgb(0 0 0 / 85%); }
+.drill-countdown-notice { color: var(--paper); font-size: 13px; margin: 0 0 12px; }
+.drill-reveal .drill-classified { font-size: 11px; letter-spacing: .13em; background: #b9a77a; color: #171b15; padding: 8px; }
+.drill-reveal h2 { margin: 16px 0; }
+.drill-reveal p { font-size: 14px; line-height: 1.5; }
+.drill-reveal > div { display: flex; gap: 10px; margin-top: 20px; }
+.personality-grid .drill-reveal button { min-height: 44px; display: block; text-align: center; font-weight: 700; }
 .coach-choice-section:disabled button { cursor: not-allowed; }
 .preference-grid { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1px solid #41484b; border-radius: 12px; }
 .preference-grid button { min-height: 43px; padding: 8px 5px; border: 0; border-right: 1px solid #41484b; color: #c8cccb; background: #202527; font-size: 10px; font-weight: 900; }

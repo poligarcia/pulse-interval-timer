@@ -38,6 +38,8 @@ export class CoachSpeechDirector<V extends SpeechVoiceLike, U extends SpeechUtte
   };
   constructor(environment: CoachSpeechDirector<V, U>['environment']) { this.environment = environment; }
 
+  get busy() { return this.active !== null || this.queue.length > 0; }
+
   speak(script: SpeechScript, options: ScriptOptions): ScriptHandle {
     let resolve!: (outcome: SpeechOutcome) => void;
     const done = new Promise<SpeechOutcome>((result) => { resolve = result; });

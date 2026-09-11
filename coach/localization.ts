@@ -1,11 +1,12 @@
 import type { Locale } from '../i18n/locales.ts';
-import type { CoachPersonalityId, PhaseKind } from './types.ts';
+import type { CoachPersonalityId, StandardCoachPersonalityId, PhaseKind } from './types.ts';
+import { DRILL_PRESENTATION } from './drill.ts';
 
 export type CoachCueKey = PhaseKind | 'complete' | 'finalWork';
 
 type PersonalityPresentation = { label: string; description: string };
 
-const PERSONALITY_PRESENTATION: Record<Locale, Record<CoachPersonalityId, PersonalityPresentation>> = {
+const PERSONALITY_PRESENTATION: Record<Locale, Record<StandardCoachPersonalityId, PersonalityPresentation>> = {
   en: {
     focused: { label: 'Focused', description: 'Precise, concise, and steady' },
     energetic: { label: 'Energetic', description: 'Upbeat, responsive, and positive' },
@@ -26,7 +27,7 @@ const PERSONALITY_PRESENTATION: Record<Locale, Record<CoachPersonalityId, Person
   },
 };
 
-const ES_PHASE_CUES: Record<CoachPersonalityId, Record<CoachCueKey, string[]>> = {
+const ES_PHASE_CUES: Record<StandardCoachPersonalityId, Record<CoachCueKey, string[]>> = {
   focused: {
     prepare: ['Preparate.'], work: ['Empezá.', 'Trabajá.'], finalWork: ['Última ronda. Empezá.'],
     rest: ['Descansá.', 'Recuperá.'], cycleRest: ['Descanso entre ciclos. Reiniciá.'],
@@ -49,7 +50,7 @@ const ES_PHASE_CUES: Record<CoachPersonalityId, Record<CoachCueKey, string[]>> =
   },
 };
 
-const PT_PHASE_CUES: Record<CoachPersonalityId, Record<CoachCueKey, string[]>> = {
+const PT_PHASE_CUES: Record<StandardCoachPersonalityId, Record<CoachCueKey, string[]>> = {
   focused: {
     prepare: ['Prepare-se.'], work: ['Comece.', 'Trabalhe.'], finalWork: ['Última rodada. Comece.'],
     rest: ['Descanse.', 'Recupere-se.'], cycleRest: ['Descanso entre ciclos. Reinicie.'],
@@ -174,7 +175,7 @@ const PT_PHRASES: Record<string, string> = {
   'calm-complete': 'Conclua o trabalho que começou.',
 };
 
-const PREVIEWS: Record<Locale, Record<CoachPersonalityId, string>> = {
+const PREVIEWS: Record<Locale, Record<StandardCoachPersonalityId, string>> = {
   en: {
     focused: 'Ready. Find your pace. Three, two, one. Start.',
     energetic: 'Ready! Stay with me. Three, two, one. Go!',
@@ -196,6 +197,7 @@ const PREVIEWS: Record<Locale, Record<CoachPersonalityId, string>> = {
 };
 
 export function getCoachPersonalityPresentation(personality: CoachPersonalityId, locale: Locale) {
+  if (personality === 'drill') return DRILL_PRESENTATION;
   return PERSONALITY_PRESENTATION[locale][personality];
 }
 
@@ -205,6 +207,7 @@ export function localizeCoachPhaseCues(
   fallback: string[],
   locale: Locale,
 ) {
+  if (personality === 'drill') return fallback;
   if (locale === 'es-AR') return ES_PHASE_CUES[personality][cue];
   if (locale === 'pt-BR') return PT_PHASE_CUES[personality][cue];
   return fallback;
@@ -217,5 +220,6 @@ export function localizeCoachPhraseText(id: string, fallback: string, locale: Lo
 }
 
 export function getCoachPreview(personality: CoachPersonalityId, locale: Locale) {
+  if (personality === 'drill') return 'ATTENTION. Recruit. You selected this assignment voluntarily. Fascinating judgment. Stand by.';
   return PREVIEWS[locale][personality];
 }

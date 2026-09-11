@@ -172,8 +172,9 @@ test('phase, preview, and contextual coach speech follow the product locale', ()
   assert.equal(intervention.speech?.text, 'Terminá lo que empezaste.');
 });
 
-test('every coach cue and contextual phrase has Spanish and Portuguese copy', () => {
+test('every standard coach cue and contextual phrase has Spanish and Portuguese copy', () => {
   for (const personality of Object.values(COACH_PERSONALITIES)) {
+    if (personality.id === 'drill') continue; // English-only experiment, separately gated and tested.
     for (const phrase of personality.phrases) {
       assert.notEqual(localizeCoachPhraseText(phrase.id, phrase.text, 'es-AR'), phrase.text);
       assert.notEqual(localizeCoachPhraseText(phrase.id, phrase.text, 'pt-BR'), phrase.text);

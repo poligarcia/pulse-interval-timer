@@ -1,4 +1,5 @@
 import type { Locale } from '../i18n/locales.ts';
+import { DRILL_LINES, DRILL_PRESENTATION } from './drill.ts';
 import {
   getCoachPreview,
   localizeCoachPhaseCues,
@@ -34,6 +35,11 @@ const ZONES = {
 };
 
 export const COACH_PERSONALITIES: Record<CoachPersonalityId, CoachPersonality> = {
+  drill: {
+    id: 'drill', ...DRILL_PRESENTATION, rate: 1.12, pitch: .94,
+    phaseCues: { prepare: ['ATTENTION. Stand by.'], work: ['BEGIN!'], finalWork: ['FINAL ROUND. BEGIN!'], rest: ['RECOVER.'], cycleRest: ['REGROUP.'], cooldown: ['EASE DOWN.'], complete: ['OBJECTIVE COMPLETE. Stand down.'] },
+    phrases: DRILL_LINES.motivation.map((line) => ({ id: line.id, text: line.parts.join(' '), intent: 'challenge', zones: ['fresh', 'settled', 'challenging', 'finishing'] })),
+  },
   focused: {
     id: 'focused',
     label: 'Focused',
@@ -156,12 +162,16 @@ export const COACH_PERSONALITIES: Record<CoachPersonalityId, CoachPersonality> =
   },
 };
 
+// Deliberate allowlist: hidden personalities such as Drill Instructor must never
+// enter Surprise Me simply because they are added to the personality registry.
+const SURPRISE_PERSONALITIES = ['focused', 'energetic', 'tough', 'calm'] as const satisfies readonly CoachPersonalityId[];
+
 export function resolveCoachPersonality(
   preference: CoachPersonalityPreference,
   random: () => number = Math.random,
 ): CoachPersonalityId {
   if (preference !== 'surprise') return preference;
-  const personalities = Object.keys(COACH_PERSONALITIES) as CoachPersonalityId[];
+  const personalities = SURPRISE_PERSONALITIES;
   const index = Math.min(personalities.length - 1, Math.floor(random() * personalities.length));
   return personalities[Math.max(0, index)];
 }

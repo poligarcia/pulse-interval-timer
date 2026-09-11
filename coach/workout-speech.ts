@@ -1,11 +1,11 @@
 import { compileSpeechScript, estimateSpeechBudget, flatSpeechScript } from './speech-script.ts';
 import type { SpeechScript, SpeechSegment } from './speech-script.ts';
 import { recoverySpeechScript } from './recovery-scripts.ts';
-import type { CoachPersonalityId, CoachSpeech } from './types.ts';
+import type { CoachPersonalityId, StandardCoachPersonalityId, CoachSpeech } from './types.ts';
 import type { Locale } from '../i18n/locales.ts';
 
 // Authored boundaries, never punctuation parsing. A copy change falls back to flat speech.
-const FINAL_ROUND: Record<Locale, Record<CoachPersonalityId, readonly [string, string]>> = {
+const FINAL_ROUND: Record<Locale, Record<StandardCoachPersonalityId, readonly [string, string]>> = {
   en: { focused: ['Final round.', 'Start.'], energetic: ['Last one.', 'Go!'], tough: ['Last round.', 'Go.'], calm: ['Final round.', 'Begin.'] },
   'es-AR': { focused: ['Última ronda.', 'Empezá.'], energetic: ['¡La última!', '¡Dale!'], tough: ['Última ronda.', 'Dale.'], calm: ['Última ronda.', 'Empezá.'] },
   'pt-BR': { focused: ['Última rodada.', 'Comece.'], energetic: ['A última!', 'Vamos!'], tough: ['Última rodada.', 'Vamos.'], calm: ['Última rodada.', 'Comece.'] },
@@ -22,6 +22,7 @@ const COOLDOWN: Record<Locale, Record<'energetic' | 'calm', readonly [string, st
 
 export function phaseSpeechScript(speech: CoachSpeech, personality: CoachPersonalityId, locale: Locale): SpeechScript {
   const script = flatSpeechScript(speech);
+  if (personality === 'drill') return script;
   const finalRound = speech.id === `${personality}-finalWork-0`;
   const parts = finalRound ? FINAL_ROUND[locale][personality]
     : speech.id === `${personality}-cycleRest-0` ? CYCLE_REST[locale]

@@ -7,8 +7,12 @@ import type { ScriptHandle } from '../../coach/speech-director.ts';
 import { workoutDeliveryExamples, speechScriptMarkup } from '../../coach/workout-delivery-examples.ts';
 import type { CoachPersonalityId } from '../../coach/types.ts';
 import { matchSupportedLocale } from '../../i18n/locales.ts';
+import { drillExamples, drillBudget, planDrillWorkout } from '../../coach/drill.ts';
+import type { DrillSound } from '../../workout/drill-sounds.ts';
 
 export type SpeechStudioProps = {
+  drillUnlocked?: boolean;
+  onPreviewDrillSound?: (kind: DrillSound) => void;
   speechEngineEnabled: boolean;
   onSpeechEngineChange: (enabled: boolean) => void;
   voices: readonly SpeechSynthesisVoice[];
@@ -38,7 +42,7 @@ const PRESETS = {
   ],
 };
 
-export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, voices, locale, onStopSpeech, onPreviewScript }: SpeechStudioProps) {
+export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, voices, locale, onStopSpeech, onPreviewScript, drillUnlocked, onPreviewDrillSound }: SpeechStudioProps) {
   const language = locale.split('-')[0];
   const presets = PRESETS[language as keyof typeof PRESETS] ?? PRESETS.en;
   const [source, setSource] = useState(presets[0]);
@@ -49,12 +53,23 @@ export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, 
   const [status, setStatus] = useState('Ready');
   const [active, setActive] = useState(false);
   const [examplePersonality, setExamplePersonality] = useState<CoachPersonalityId>('focused');
+  const [drillDuration, setDrillDuration] = useState(30);
+  const [drillCompact, setDrillCompact] = useState(false);
+  const [drillExampleId, setDrillExampleId] = useState('');
   const handleRef = useRef<ScriptHandle | null>(null);
   const compatible = voices.filter((voice) => voice.lang.split('-')[0].toLowerCase() === language.toLowerCase());
   const selected = compatible.find((voice) => voice.voiceURI === voiceURI) ?? compatible.find((voice) => voice.localService);
   const parsed = useMemo(() => parseSpeechScript(source, { id: 'labs-preview', rate, pitch }), [source, rate, pitch]);
   const plan = parsed.ok ? compileSpeechScript(parsed.script) : parsed;
   const workoutExamples = useMemo(() => workoutDeliveryExamples(examplePersonality, matchSupportedLocale(locale) ?? 'en'), [examplePersonality, locale]);
+
+  const loadDrillExample = (id: string, compact: boolean) => {
+    const entry = drillExamples(compact).find(({ script }) => script.id === id);
+    if (!entry) return;
+    onStopSpeech(); handleRef.current = null; setActive(false);
+    setSource(speechScriptMarkup(entry.script)); setRate(entry.script.rate); setPitch(entry.script.pitch);
+    setStatus(`Loaded ${entry.label}. Budget including startup margin: ${(drillBudget(entry.script) / 1000).toFixed(1)}s.`);
+  };
 
   useEffect(() => () => { handleRef.current?.cancel(); }, []);
 
@@ -92,6 +107,26 @@ export function SpeechScriptStudio({ speechEngineEnabled, onSpeechEngineChange, 
         setStatus(`Loaded ${example.label}. Estimated speech budget: ${(example.estimatedMs / 1000).toFixed(1)}s; actual delivery varies.`);
       }}>Load {example.label}</button>)}</div>
       <p className="labs-fine-print">These are the actual workout scripts for this personality and language. Enable Coaching phrases in Settings to hear recovery text during workouts. Short intervals use simpler delivery or only the phase cue. Loading an example does not change your workout personality.</p>
+      {language === 'en' && drillUnlocked && <details className="drill-studio"><summary>Drill Instructor auditions</summary>
+        <p className="labs-fine-print">Load actual dialogue, including rare events. Use Play script to audition it. Previewing never changes your workout.</p>
+        <label className="labs-field">Dialogue<select value={drillExampleId} onChange={(event) => {
+          setDrillExampleId(event.target.value); loadDrillExample(event.target.value, drillCompact);
+        }}><option value="" disabled>Choose a Drill script</option>{drillExamples(drillCompact).map(({ label, script }) => <option key={script.id} value={script.id}>{label}</option>)}</select></label>
+        <label className="speech-engine-toggle"><input type="checkbox" checked={drillCompact} onChange={(event) => {
+          setDrillCompact(event.target.checked); loadDrillExample(drillExampleId, event.target.checked);
+        }} /> Compact Drill delivery</label>
+        <p className="labs-fine-print">Compare the full performance with its shorter workout variant. The planner chooses what fits; compact fake countdowns still include their reveal. The Settings preview always demonstrates full delivery.</p>
+        <div className="labs-actions">{(['prepare', 'work', 'rest', 'cycleRest', 'cooldown', 'complete'] as const).map((kind) => <button key={kind} type="button" className="labs-secondary-button" onClick={() => { onStopSpeech(); onPreviewDrillSound?.(kind); }}>Whistle: {kind}</button>)}</div>
+        <label className="labs-field">Planning example<select value={drillDuration} onChange={(event) => setDrillDuration(Number(event.target.value))}>{[5, 15, 30, 60].map((seconds) => <option key={seconds} value={seconds}>{seconds}-second work interval</option>)}</select></label>
+        <p className="labs-fine-print">This example requests a rare event to show whether it fits. Actual workouts choose rare events probabilistically.</p>
+        {planDrillWorkout([{ kind: 'work', duration: drillDuration, round: 1, cycle: 1 }], [], () => 0).phases.map((phase, index) => <ul key={index}>
+          <li>{phase.script ? 'Start command after the whistle' : 'Whistle only at the start'}</li>
+          {phase.slots.map((slot) => <li key={slot.script.id}>{slot.kind}: {(slot.atMs / 1000).toFixed(1)}s–{(slot.finishByMs / 1000).toFixed(1)}s <button type="button" className="labs-secondary-button" onClick={() => {
+            onStopSpeech(); handleRef.current = null; setActive(false); setSource(speechScriptMarkup(slot.script)); setRate(slot.script.rate); setPitch(slot.script.pitch); setDeadline(Math.max(1, Math.floor((slot.finishByMs - slot.atMs) / 1000))); setStatus('Loaded with this slot’s playback deadline.');
+          }}>Load slot</button></li>)}
+          <li>Protected countdown: {drillDuration - 3}s–{drillDuration}s</li>
+        </ul>)}
+      </details>}
       <div className="labs-actions">{['Two-part command', 'Status cue', 'Delivery changes', 'Rehearsal countdown'].map((name, index) =>
         <button key={name} className="labs-secondary-button" onClick={() => setSource(presets[index])}>{name}</button>)}</div>
       <label className="labs-field">Script<textarea rows={6} maxLength={8000} value={source} onChange={(event) => setSource(event.target.value)} spellCheck={false} /></label>

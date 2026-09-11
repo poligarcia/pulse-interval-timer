@@ -42,6 +42,11 @@ import type { ScriptOptions } from '@/coach/speech-director';
 import { flatSpeechScript } from '@/coach/speech-script';
 import type { SpeechScript } from '@/coach/speech-script';
 import { phaseAnnouncementScript, workoutSpeechCutoff, workoutSpeechSchedule } from '@/coach/workout-speech';
+import { DRILL_STORAGE_KEY, drillAvailable, drillBudget, drillPreviewScript, fitDrillScript, drillSpeech, drillText, nextDrillSlot, parseDrillMemory, pickDrill, planDrillWorkout, rememberDrill, resumeDrillPlan } from '@/coach/drill';
+import type { DrillPlan } from '@/coach/drill';
+import { DrillUnlock } from '@/coach/DrillUnlock';
+import { scheduleDrillWhistle } from '@/workout/drill-sounds';
+import type { DrillSound } from '@/workout/drill-sounds';
 import {
   calculateProgressMilestones,
   calculateProgressStreaks,
@@ -831,6 +836,16 @@ export default function Home() {
   const [calendarStatus, setCalendarStatus] = useState('');
   const [labsUnlocked, setLabsUnlocked] = useState(false);
   const [speechEngineEnabled, setSpeechEngineEnabled] = useState(false);
+  const [drillUnlocked, setDrillUnlocked] = useState(false);
+  const drillMemoryRef = useRef(parseDrillMemory(null));
+  const drillPlanRef = useRef<DrillPlan | null>(null);
+  const drillCueEndsRef = useRef(0);
+  const drillSoundHandlesRef = useRef<ScheduledAudioHandle[]>([]);
+  const drillSoundGenerationRef = useRef(0);
+  const [drillCountdownNotice, setDrillCountdownNotice] = useState<{ phaseIndex: number; revealed: boolean } | null>(null);
+  const drillEnabled = drillAvailable(locale, labsUnlocked, speechEngineEnabled, drillUnlocked);
+  const drillEnabledRef = useRef(drillEnabled);
+  drillEnabledRef.current = drillEnabled;
   const [labsUnlockSequence, setLabsUnlockSequence] = useState<LabsUnlockSequence>(() => createLabsUnlockSequence());
   const [labsUnlockMessage, setLabsUnlockMessage] = useState('');
   const [hydrated, setHydrated] = useState(false);
@@ -910,6 +925,7 @@ export default function Home() {
       const labsSettings = readLabsSettings(window.localStorage);
       storedLabsUnlocked = labsSettings.unlocked;
       storedSpeechEngineEnabled = labsSettings.unlocked && labsSettings.speechEngineEnabled === true;
+      try { drillMemoryRef.current = parseDrillMemory(JSON.parse(window.localStorage.getItem(DRILL_STORAGE_KEY) ?? 'null')); } catch { /* Use clean Drill defaults. */ }
       if (savedTimers) {
         const parsed = JSON.parse(savedTimers) as unknown;
         if (Array.isArray(parsed)) {
@@ -945,6 +961,7 @@ export default function Home() {
       if (storedRecentTimerIds) setRecentTimerIds(storedRecentTimerIds);
       if (storedWorkoutSessions) setWorkoutSessions(storedWorkoutSessions);
       if (storedSettings) setSettings(storedSettings);
+      setDrillUnlocked(drillMemoryRef.current.unlocked);
       if (storedLabsUnlocked !== null) {
         setSpeechEngineEnabled(storedSpeechEngineEnabled);
         setLabsUnlocked(storedLabsUnlocked);
@@ -1153,6 +1170,14 @@ export default function Home() {
       return scheduleTone(context, 1180, 0.035, 0.34, audioTime, currentSettings.volume);
     }
 
+    if (drillEnabledRef.current && activeCoachRef.current?.personality === 'drill') {
+      const kind = event.kind === 'complete' ? 'complete' : sequenceRef.current[event.phaseIndex]?.kind;
+      if (!kind) return undefined;
+      const handle = scheduleDrillWhistle(context, kind, audioTime, currentSettings.volume);
+      drillCueEndsRef.current = performance.now() + Math.max(0, handle.endsAt - context.currentTime) * 1000;
+      return handle;
+    }
+
     if (event.kind === 'complete') {
       return [
         scheduleTone(context, 1040, 0.3, 1.2, audioTime, currentSettings.volume),
@@ -1180,6 +1205,12 @@ export default function Home() {
   }, [scheduleTone]);
 
   const stopWorkoutAudio = useCallback((cancelPending = true) => {
+    if (cancelPending) {
+      drillSoundGenerationRef.current++;
+      for (const handle of drillSoundHandlesRef.current) handle.cancel();
+      drillSoundHandlesRef.current = [];
+      drillCueEndsRef.current = 0;
+    }
     workoutAudioSchedulerRef.current?.stop({ cancelPending });
     workoutAudioSchedulerRef.current = null;
   }, []);
@@ -1224,7 +1255,21 @@ export default function Home() {
     }
   }, [scheduleWorkoutAudioEvent, stopWorkoutAudio]);
 
+  const playDrillSound = useCallback(async (kind: DrillSound) => {
+    if (!settingsRef.current.soundEnabled || settingsRef.current.volume <= 0) return false;
+    const generation = workoutRunGenerationRef.current;
+    const soundGeneration = drillSoundGenerationRef.current;
+    const context = await ensureAudio();
+    const current = settingsRef.current;
+    if (!context || generation !== workoutRunGenerationRef.current || soundGeneration !== drillSoundGenerationRef.current || document.visibilityState !== 'visible' || !current.soundEnabled || current.volume <= 0) return false;
+    const handle = scheduleDrillWhistle(context, kind, context.currentTime + .005, current.volume);
+    drillSoundHandlesRef.current = [...drillSoundHandlesRef.current.filter((h) => h.endsAt > context.currentTime), handle];
+    drillCueEndsRef.current = performance.now() + (handle.endsAt - context.currentTime) * 1000;
+    return true;
+  }, [ensureAudio]);
+
   const playCue = useCallback(async (kind: PhaseKind | 'complete') => {
+    if (drillEnabledRef.current && (activeCoachRef.current?.personality ?? settingsRef.current.coachPersonality) === 'drill') return playDrillSound(kind);
     const frequencies: Record<PhaseKind | 'complete', number> = {
       prepare: 560,
       work: 920,
@@ -1238,14 +1283,14 @@ export default function Home() {
       window.setTimeout(() => { void playTone(1240, 0.34, 1.2); }, 180);
     }
     return played;
-  }, [playTone]);
+  }, [playDrillSound, playTone]);
 
   const resolveWorkoutCoach = useCallback(() => {
     const liveVoices = getSpeechController()?.getVoices()
       ?? (availableVoices.length > 0
         ? availableVoices
         : ('speechSynthesis' in window ? window.speechSynthesis.getVoices() : []));
-    const currentCoach = activeCoachRef.current;
+    const currentCoach = activeCoachRef.current?.personality === 'drill' && !drillEnabledRef.current ? null : activeCoachRef.current;
     if (labsUnlocked && speechEngineEnabled && currentCoach?.voiceURI) return currentCoach;
     if (currentCoach
       && (liveVoices.length === 0
@@ -1255,7 +1300,7 @@ export default function Home() {
     }
 
     const personality = currentCoach?.personality
-      ?? resolveCoachPersonality(settings.coachPersonality);
+      ?? resolveCoachPersonality(settings.coachPersonality === 'drill' && !drillEnabledRef.current ? 'tough' : settings.coachPersonality);
     const coach = resolveActiveCoach({
       voices: labsUnlocked && speechEngineEnabled && !settings.voiceURI
         ? liveVoices.filter((voice) => voice.localService === true)
@@ -1283,12 +1328,20 @@ export default function Home() {
     speechControllerRef.current?.cancel();
   }, []);
 
+  const stopSpeechPreview = useCallback(() => {
+    cancelCoachSpeech();
+    drillSoundGenerationRef.current++;
+    for (const handle of drillSoundHandlesRef.current) handle.cancel();
+    drillSoundHandlesRef.current = [];
+  }, [cancelCoachSpeech]);
+
   const speakCoach = useCallback((
     speech: CoachSpeech,
     options?: { interrupt?: boolean; voiceURI?: string; onEnd?: () => void; script?: SpeechScript; scheduling?: Partial<ScriptOptions> },
   ) => {
     const controller = getSpeechController();
     if (!settings.voiceEnabled || !controller || document.visibilityState !== 'visible') return null;
+    if (speech.id.startsWith('drill-') && !drillEnabledRef.current) return null;
     if (options?.interrupt) {
       coachSpeechGenerationRef.current += 1;
       if (pendingCoachSpeechTimeoutRef.current !== null) {
@@ -1309,9 +1362,19 @@ export default function Home() {
         script, countdown ? 'countdown' : options?.interrupt ? 'phase' : 'motivation', now, phaseEnd,
         phase ? ['prepare', 'work', 'rest'].includes(phase.kind) : false,
       );
+      let remembered = false;
       return getSpeechDirector()?.speak(script, {
         ...scheduling, ...options?.scheduling,
         locale: speechLanguageForLocale(locale), voiceURI,
+        onStart: (voice) => {
+          options?.scheduling?.onStart?.(voice);
+          if (!remembered && script.id.startsWith('drill-')) {
+            remembered = true;
+            drillMemoryRef.current = rememberDrill(drillMemoryRef.current, script.id);
+            if (!drillPlanRef.current?.used.includes(script.id)) drillPlanRef.current?.used.push(script.id);
+            try { window.localStorage.setItem(DRILL_STORAGE_KEY, JSON.stringify(drillMemoryRef.current)); } catch { /* Session memory still works. */ }
+          }
+        },
         onEnd: options?.onEnd,
       }) ?? null;
     }
@@ -1344,6 +1407,14 @@ export default function Home() {
   }, [cancelCoachSpeech, locale, labsUnlocked, speechEngineEnabled]);
 
   useEffect(() => {
+    if (!hydrated || settings.coachPersonality !== 'drill' || drillEnabled) return;
+    cancelCoachSpeech();
+    activeCoachRef.current = null;
+    drillPlanRef.current = null;
+    window.queueMicrotask(() => setSettings((current) => current.coachPersonality === 'drill' ? { ...current, coachPersonality: 'tough' } : current));
+  }, [hydrated, drillEnabled, settings.coachPersonality, cancelCoachSpeech]);
+
+  useEffect(() => {
     if (!settings.voiceEnabled || settings.volume < previousSpeechVolumeRef.current || settings.volume === 0) cancelCoachSpeech();
     previousSpeechVolumeRef.current = settings.volume;
   }, [cancelCoachSpeech, settings.voiceEnabled, settings.volume]);
@@ -1372,6 +1443,20 @@ export default function Home() {
     const personality = activeCoachRef.current?.personality
       ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
     const speech = selectPhaseSpeech(personality, phase.kind, contextForPhase(phase, index), locale);
+    if (personality === 'drill') {
+      cancelCoachSpeech();
+      const planned = drillPlanRef.current?.phases[index];
+      if (!planned?.script || !drillEnabledRef.current) return null;
+      const now = performance.now();
+      const elapsed = workoutTimelineRef.current?.snapshot(now).elapsedMs ?? planned.startMs;
+      // Do not replay a missed phase command after returning from the background.
+      if (elapsed - planned.startMs > 1000) return null;
+      const delayed = { ...planned.script, segments: [{ kind: 'pause' as const, ms: Math.max(650, drillCueEndsRef.current - now + 60) }, ...planned.script.segments] };
+      const finishBy = now + planned.endMs - elapsed - (['prepare', 'work', 'rest'].includes(phase.kind) ? 3250 : 250);
+      return speakCoach(drillSpeech(delayed), { interrupt: true, script: delayed, scheduling: {
+        priority: 400, mustFinishByMs: finishBy, admissionBudgetMs: drillBudget(delayed),
+      } });
+    }
     const experimental = labsUnlocked && speechEngineEnabled;
     let script: SpeechScript | undefined;
     if (experimental) {
@@ -1552,6 +1637,13 @@ export default function Home() {
       return null;
     }
 
+    if (drillEnabledRef.current && resolveWorkoutCoach().personality === 'drill') {
+      const script = drillPlanRef.current?.phases[index]?.script;
+      const selection = script ? { phaseIndex: index, kind, message: { id: script.id, text: drillText(script), author: 'Drill Instructor' } } : null;
+      setRunnerMessageSelection(selection);
+      return selection;
+    }
+
     const selection = selectDisplayMessage(kind, displayMessageMemoryRef.current, locale, Math.random, {
       scriptedPersonality: labsUnlocked && speechEngineEnabled ? resolveWorkoutCoach().personality : undefined,
     });
@@ -1620,7 +1712,13 @@ export default function Home() {
       const personality = activeCoachRef.current?.personality
         ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
       const finishingFromCooldown = settings.coachPhrasesEnabled && sequence[sequence.length - 1]?.kind === 'cooldown';
-      speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
+      if (personality === 'drill') {
+        const script = fitDrillScript(pickDrill(drillPlanRef.current?.pauses ? 'comeback' : 'complete', drillMemoryRef.current.recent), 9300);
+        if (script) {
+          const delayed = { ...script, segments: [{ kind: 'pause' as const, ms: 700 }, ...script.segments] };
+          speakCoach(drillSpeech(script), { interrupt: true, script: delayed, scheduling: { mustFinishByMs: performance.now() + 10000 } });
+        }
+      } else speakCoach(selectPhaseSpeech(personality, 'complete', undefined, locale), { interrupt: !finishingFromCooldown });
     }
     releaseWakeLock();
     suppressWorkoutCuesRef.current = false;
@@ -1632,6 +1730,7 @@ export default function Home() {
     const upcoming = sequence[nextIndex];
     if (!upcoming) return;
     transitionLockRef.current = true;
+    setDrillCountdownNotice(null);
     phaseIndexRef.current = nextIndex;
     setPhaseIndex(nextIndex);
     setRemaining(nextRemaining);
@@ -1671,6 +1770,34 @@ export default function Home() {
         return;
       }
 
+      if (drillEnabledRef.current && activeCoachRef.current?.personality === 'drill'
+        && settings.voiceEnabled && settings.coachPhrasesEnabled && drillPlanRef.current
+        && document.visibilityState === 'visible' && !suppressWorkoutCuesRef.current) {
+        const slot = nextDrillSlot(drillPlanRef.current, snapshot.phaseIndex, snapshot.elapsedMs);
+        if (slot && !speechDirectorRef.current?.busy) {
+          const now = performance.now();
+          const generation = workoutRunGenerationRef.current;
+          let started = false;
+          const handle = speakCoach(drillSpeech(slot.script), { script: slot.script, scheduling: {
+            priority: 100, mustStartByMs: now + slot.startByMs - snapshot.elapsedMs,
+            mustFinishByMs: now + slot.finishByMs - snapshot.elapsedMs, admissionBudgetMs: drillBudget(slot.script),
+            onStart: () => {
+              if (started || slot.kind !== 'fake') return;
+              started = true;
+              setDrillCountdownNotice({ phaseIndex: snapshot.phaseIndex, revealed: false });
+            },
+          } });
+          // Native voices can overrun estimates or fail between segments. Keep a
+          // visual explanation even if the spoken reveal cannot finish in time.
+          if (slot.kind === 'fake' && handle && 'done' in handle) void handle.done.then(() => {
+            if (started && generation === workoutRunGenerationRef.current && runningRef.current
+              && phaseIndexRef.current === snapshot.phaseIndex) {
+              setDrillCountdownNotice({ phaseIndex: snapshot.phaseIndex, revealed: true });
+            }
+          });
+        }
+      }
+
       const nextRemaining = snapshot.remainingSeconds;
       if (nextRemaining !== lastTickSecondRef.current) {
         lastTickSecondRef.current = nextRemaining;
@@ -1682,7 +1809,7 @@ export default function Home() {
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           speakCoach(makeCountdownSpeech(personality, nextRemaining));
         }
-        if (settings.voiceEnabled && settings.coachPhrasesEnabled && timelinePhase.kind === 'work') {
+        if (settings.voiceEnabled && settings.coachPhrasesEnabled && timelinePhase.kind === 'work' && activeCoachRef.current?.personality !== 'drill') {
           const personality = activeCoachRef.current?.personality
             ?? resolveCoachPersonality(settings.coachPersonality, () => 0);
           const context = contextForPhase(timelinePhase, snapshot.phaseIndex, nextRemaining);
@@ -1852,6 +1979,7 @@ export default function Home() {
   };
 
   const beginWorkout = (timer: TimerConfig) => {
+    setDrillCountdownNotice(null);
     suppressResumeAnalyticsRef.current = false;
     track('timer_selected', { entry_point: screen === 'library' ? 'library' : 'home',
       timer_source: DEFAULT_TIMERS.some((preset) => preset.id === timer.id) ? 'preset' : 'custom' });
@@ -1898,6 +2026,7 @@ export default function Home() {
   };
 
   const toggleWorkout = async () => {
+    setDrillCountdownNotice(null);
     if (workoutStartPendingRef.current) return;
     if (finished) {
       suppressWorkoutCuesRef.current = false;
@@ -1935,10 +2064,19 @@ export default function Home() {
       track('workout_paused', { phase_kind: sequenceRef.current[phaseIndexRef.current]?.kind ?? 'work' });
       setRunning(false);
       cancelCoachSpeech();
+      if (drillEnabledRef.current && activeCoachRef.current?.personality === 'drill' && drillPlanRef.current) {
+        drillPlanRef.current.pauses++;
+        if (settings.coachPhrasesEnabled) {
+          const script = fitDrillScript(pickDrill('pause', [...drillMemoryRef.current.recent, ...drillPlanRef.current.used]), 8500);
+          const now = performance.now();
+          if (script) speakCoach(drillSpeech(script), { script, interrupt: true, scheduling: { priority: 400, mustStartByMs: now + 800, mustFinishByMs: now + 8500, admissionBudgetMs: drillBudget(script) } });
+        }
+      }
       releaseWakeLock();
     } else {
       if (document.visibilityState !== 'visible') return;
       const isResuming = hasWorkoutStarted;
+      cancelCoachSpeech();
       const runGeneration = workoutRunGenerationRef.current + 1;
       const startToken = workoutStartTokenRef.current + 1;
       workoutStartTokenRef.current = startToken;
@@ -1952,6 +2090,10 @@ export default function Home() {
       workoutTimelineRef.current = timeline;
       const pausedSnapshot = timeline.snapshot(performance.now());
       const resumedPhase = sequence[pausedSnapshot.phaseIndex];
+      if (drillEnabledRef.current && activeCoachRef.current?.personality === 'drill') {
+        if (!isResuming || !drillPlanRef.current) drillPlanRef.current = planDrillWorkout(sequence, drillMemoryRef.current.recent, Math.random, settings.coachPhrasesEnabled, drillMemoryRef.current.lastFake);
+        else resumeDrillPlan(drillPlanRef.current, pausedSnapshot.elapsedMs);
+      }
       let followUp: CoachSpeech | undefined;
       if (settings.coachPhrasesEnabled
         && runnerMessageSelection?.phaseIndex === pausedSnapshot.phaseIndex) {
@@ -1972,7 +2114,7 @@ export default function Home() {
       const audioRecovery = soundRequested
         ? ensureAudio(forceRecreate)
         : Promise.resolve<AudioContext | null>(null);
-      const initialSpeech = resumedPhase && !isResuming
+      const initialSpeech = resumedPhase && !isResuming && activeCoachRef.current?.personality !== 'drill'
         ? announcePhase(resumedPhase, pausedSnapshot.phaseIndex, followUp)
         : null;
 
@@ -2008,6 +2150,16 @@ export default function Home() {
         runningRef.current = true;
         setRunning(true);
         setHasWorkoutStarted(true);
+        if (!isResuming && resumedPhase && activeCoachRef.current?.personality === 'drill') {
+          selectRunnerMessage(resumedPhase, pausedSnapshot.phaseIndex);
+          announcePhase(resumedPhase, pausedSnapshot.phaseIndex);
+        }
+        if (isResuming && drillEnabledRef.current && activeCoachRef.current?.personality === 'drill' && resumedPhase && settings.coachPhrasesEnabled) {
+          const now = performance.now();
+          const cutoff = workoutSpeechCutoff(now + resumedPhase.duration * 1000 - pausedSnapshot.phaseElapsedMs, ['prepare', 'work', 'rest'].includes(resumedPhase.kind));
+          const script = fitDrillScript(pickDrill('resume', drillMemoryRef.current.recent), Math.min(cutoff - now, 4000));
+          if (script) speakCoach(drillSpeech(script), { script, scheduling: { priority: 200, mustStartByMs: now + 500, mustFinishByMs: Math.min(cutoff, now + 4000), admissionBudgetMs: drillBudget(script) } });
+        }
         if (isResuming) {
           if (!suppressResumeAnalyticsRef.current) track('workout_resumed', { phase_kind: resumedPhase?.kind ?? 'work' });
         } else {
@@ -2032,6 +2184,7 @@ export default function Home() {
   };
 
   const resetWorkout = () => {
+    setDrillCountdownNotice(null);
     suppressResumeAnalyticsRef.current = false;
     trackWorkoutEnd('reset');
     suppressWorkoutCuesRef.current = false;
@@ -2288,7 +2441,10 @@ export default function Home() {
       locale,
       random: () => 0,
     });
-    speakCoach(makePreviewSpeech(personality, locale), { interrupt: true, voiceURI: preview.voiceURI });
+    if (personality === 'drill') {
+      const script = drillPreviewScript();
+      speakCoach(drillSpeech(script), { script, interrupt: true, voiceURI: preview.voiceURI });
+    } else speakCoach(makePreviewSpeech(personality, locale), { interrupt: true, voiceURI: preview.voiceURI });
   };
 
   const restoreWorkoutAudio = () => {
@@ -2336,14 +2492,16 @@ export default function Home() {
     return (
       <Suspense fallback={<main className="app-shell labs-screen"><p className="screen-loading" role="status">{copy.status.openingLabs}</p></main>}>
         <LabsScreen onBack={leaveLabs} onHideLabs={hideLabsFromSettings}
+          drillUnlocked={drillUnlocked}
+          onPreviewDrillSound={(kind) => { if (drillEnabledRef.current) void playDrillSound(kind); }}
           speechEngineEnabled={labsUnlocked && speechEngineEnabled}
           onSpeechEngineChange={(enabled) => {
-            cancelCoachSpeech();
+            stopSpeechPreview();
             setSpeechEngineEnabled(enabled && labsUnlocked);
             writeLabsSettings(window.localStorage, { version: 1, unlocked: labsUnlocked, speechEngineEnabled: enabled && labsUnlocked });
           }}
           voices={availableVoices} locale={speechLanguageForLocale(locale)}
-          onStopSpeech={cancelCoachSpeech}
+          onStopSpeech={stopSpeechPreview}
           onPreviewScript={(script, voiceURI, deadlineMs) => {
             if (!labsUnlocked || !speechEngineEnabled || document.visibilityState !== 'visible') return null;
             const controller = getSpeechController();
@@ -2500,8 +2658,8 @@ export default function Home() {
               }} />
             </div>
             <button className="setting-row setting-action" onClick={() => { void playCue('work'); }}>
-              <div><strong>{copy.audioSettings.soundScheme}</strong><small>{copy.audioSettings.soundSchemeHelper}</small></div>
-              <span className="setting-value">{copy.audioSettings.appBeep} <i className="mini-play"><PlayGlyph /></i></span>
+              <div><strong>{copy.audioSettings.soundScheme}</strong><small>{drillEnabled && settings.coachPersonality === 'drill' ? 'Phase whistles for Drill Instructor' : copy.audioSettings.soundSchemeHelper}</small></div>
+              <span className="setting-value">{drillEnabled && settings.coachPersonality === 'drill' ? 'Drill whistle' : copy.audioSettings.appBeep} <i className="mini-play"><PlayGlyph /></i></span>
             </button>
             <label className="volume-row">
               <span className="volume-icon">−</span>
@@ -2553,7 +2711,7 @@ export default function Home() {
               <legend>{copy.coachSettings.personality}</legend>
               <p>{copy.coachSettings.personalityHelper}</p>
               <div className="personality-grid">
-                {Object.values(COACH_PERSONALITIES).map((personality) => {
+                {Object.values(COACH_PERSONALITIES).filter((p) => p.id !== 'drill').map((personality) => {
                   const presentation = getCoachPersonalityPresentation(personality.id, locale);
                   return <button
                     type="button"
@@ -2566,15 +2724,20 @@ export default function Home() {
                     <small>{presentation.description}</small>
                   </button>;
                 })}
-                <button
-                  type="button"
-                  className={`surprise-personality ${settings.coachPersonality === 'surprise' ? 'selected' : ''}`}
-                  aria-pressed={settings.coachPersonality === 'surprise'}
-                  onClick={() => setSettings((current) => ({ ...current, coachPersonality: 'surprise' }))}
-                >
-                  <strong>{copy.coachSettings.surpriseMe}</strong>
-                  <small>{copy.coachSettings.surprisePersonalityHelper}</small>
-                </button>
+                {drillEnabled && <button type="button" className={`drill-personality ${settings.coachPersonality === 'drill' ? 'selected' : ''}`}
+                  aria-pressed={settings.coachPersonality === 'drill'} onClick={() => setSettings((current) => ({ ...current, coachPersonality: 'drill' }))}>
+                  <strong>Drill Instructor</strong><small>Relentless commands. Rare mercy.</small>
+                </button>}
+                <DrillUnlock enabled={locale === 'en' && labsUnlocked && speechEngineEnabled} unlocked={drillUnlocked}
+                  selected={settings.coachPersonality === 'surprise'} label={copy.coachSettings.surpriseMe} helper={copy.coachSettings.surprisePersonalityHelper}
+                  onSurprise={() => setSettings((current) => ({ ...current, coachPersonality: 'surprise' }))}
+                  onCue={() => { void playDrillSound('unlock'); }}
+                  onUnlock={() => {
+                    drillMemoryRef.current = { ...drillMemoryRef.current, unlocked: true };
+                    setDrillUnlocked(true);
+                    try { window.localStorage.setItem(DRILL_STORAGE_KEY, JSON.stringify(drillMemoryRef.current)); } catch { /* Unlock remains available this visit. */ }
+                  }}
+                  onSelect={() => setSettings((current) => ({ ...current, coachPersonality: 'drill' }))} />
               </div>
             </fieldset>
             <fieldset className={`coach-choice-section compact ${!settings.voiceEnabled ? 'unavailable' : ''}`} disabled={!settings.voiceEnabled}>
@@ -2720,6 +2883,9 @@ export default function Home() {
           <p className="phase-kicker">{finished ? copy.runner.sessionKicker : copy.phase[currentPhase?.kind ?? 'prepare'].short}</p>
           <h1>{finished ? copy.runner.complete : copy.phase[currentPhase?.kind ?? 'prepare'].label}</h1>
           <div className="giant-time">{finished ? <AppIcon name="check" size={132} strokeWidth={2.2} /> : formatTime(remaining)}</div>
+          {drillEnabled && !finished && currentPhase?.kind === 'work' && drillCountdownNotice?.phaseIndex === phaseIndex && (
+            <p className="drill-countdown-notice">{drillCountdownNotice.revealed ? 'Rehearsal countdown. Keep working.' : 'Follow the on-screen timer.'}</p>
+          )}
           {finished && (
             <div className="completion-progress-card">
               <strong>{copy.runner.trainingAdded(formatTime(workoutDuration(activeTimer)))}</strong>

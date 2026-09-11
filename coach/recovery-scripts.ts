@@ -1,6 +1,7 @@
 import { BRAND_COACH_NAME } from '../branding.ts';
 import type { Locale } from '../i18n/locales.ts';
-import type { CoachPersonalityId, CoachSpeech } from './types.ts';
+import type { CoachPersonalityId, StandardCoachPersonalityId, CoachSpeech } from './types.ts';
+import { DRILL_LINES } from './drill.ts';
 import type { DisplayMessageKind } from './display-messages.ts';
 import { flatSpeechScript } from './speech-script.ts';
 import type { SpeechScript, SpeechStyle } from './speech-script.ts';
@@ -9,7 +10,7 @@ type ThoughtPair = readonly [string, string];
 type RecoveryCopy = { rest: readonly [ThoughtPair, ThoughtPair]; cooldown: ThoughtPair };
 
 // Original Laptiva copy. Boundaries are authored per language, never inferred from punctuation.
-const COPY: Record<Locale, Record<CoachPersonalityId, RecoveryCopy>> = {
+const COPY: Record<Locale, Record<StandardCoachPersonalityId, RecoveryCopy>> = {
   en: {
     focused: {
       rest: [['Relax your shoulders.', 'Use this rest to reset.'], ['One round at a time.', 'Let your breathing settle.']],
@@ -67,13 +68,15 @@ const COPY: Record<Locale, Record<CoachPersonalityId, RecoveryCopy>> = {
 };
 
 export const RECOVERY_DELIVERY: Record<CoachPersonalityId, { pauseMs: number; lead: SpeechStyle; closing: SpeechStyle; minimumBudgetMs: number }> = {
+  drill: { pauseMs: 280, lead: {}, closing: { rateDelta: .06 }, minimumBudgetMs: 6000 },
   focused: { pauseMs: 450, lead: {}, closing: { rateDelta: -.04, volumeScale: .95 }, minimumBudgetMs: 6500 },
   energetic: { pauseMs: 400, lead: { rateDelta: .03, pitchDelta: .02 }, closing: { rateDelta: -.07, volumeScale: .95 }, minimumBudgetMs: 7000 },
   tough: { pauseMs: 500, lead: { pitchDelta: -.02 }, closing: { rateDelta: -.03, volumeScale: .95 }, minimumBudgetMs: 6500 },
   calm: { pauseMs: 700, lead: { rateDelta: -.03, volumeScale: .95 }, closing: { rateDelta: -.07, pitchDelta: -.02, volumeScale: .9 }, minimumBudgetMs: 8500 },
 };
 
-export function recoveryMessages(locale: Locale, personality: CoachPersonalityId, kind: DisplayMessageKind) {
+export function recoveryMessages(locale: Locale, personality: CoachPersonalityId, kind: DisplayMessageKind): { id: string; text: string; author: string; parts: readonly string[] }[] {
+  if (personality === 'drill') return (kind === 'motivation' ? DRILL_LINES.rest : DRILL_LINES.cooldown).map((line) => ({ id: line.id, text: line.parts.join(' '), author: 'Drill Instructor', parts: line.parts }));
   const copy = COPY[locale][personality];
   const pairs = kind === 'motivation' ? copy.rest : [copy.cooldown];
   return pairs.map((parts, index) => ({
