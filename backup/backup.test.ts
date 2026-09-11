@@ -27,7 +27,8 @@ test('round trip preserves settings including defaults, both orders, and complet
   restoreBackup(target, plan.backup);
   assert.deepEqual(JSON.parse(target.getItem('pulse-timers-v2')!), original.state.timers);
   assert.deepEqual(JSON.parse(target.getItem('pulse-recent-timers-v1')!), ['two', 'one']);
-  assert.deepEqual(JSON.parse(target.getItem('pulse-workout-sessions-v2')!), original.state.workoutSessions);
+  // JSON represents UTC's negative-zero offset as zero. Compare the persisted representation.
+  assert.deepEqual(JSON.parse(target.getItem('pulse-workout-sessions-v2')!), JSON.parse(JSON.stringify(original.state.workoutSessions)));
   assert.equal(target.getItem('pulse-locale-v1'), 'es-AR');
   assert.equal(target.getItem('unrelated'), 'keep');
   assert.equal(target.getItem('laptiva-analytics-consent'), null);
